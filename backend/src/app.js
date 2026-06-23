@@ -19,6 +19,7 @@ const adminRoutes = require('./routes/admin');
 const cartRoutes = require('./routes/cart');
 const allowedOrigins = [
   'http://localhost:3000',
+  'https://alchemyofpetals-cyan.vercel.app',
   process.env.FRONTEND_URL // This will be set inside your Render dashboard later
 ];
 
