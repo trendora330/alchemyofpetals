@@ -52,19 +52,25 @@ const getCart = async (req, res, next) => {
 const addToCart = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { productId, quantity = 1 } = req.body;
+    
+    // Accept productId, product_id, or simply id from the frontend request body
+    const productId = req.body.productId || req.body.product_id || req.body.id;
+    const quantity = req.body.quantity || 1;
 
     if (!productId) {
-      return res.status(400).json({ error: 'Product ID is required' });
+      return res.status(400).json({ 
+        error: 'Product ID is required', 
+        receivedData: req.body // This helps us debug by showing exactly what frontend sent
+      });
     }
 
-    // Check if the item is already in the user's cart
+    // Check if the item is already in the user's cart table
     const { data: existingItem, error: fetchError } = await supabase
       .from('cart')
       .select('id, quantity')
       .eq('user_id', userId)
       .eq('product_id', productId)
-      .maybeSingle(); // Safely handle single row selection
+      .maybeSingle();
 
     if (fetchError) {
       return res.status(400).json({ error: fetchError.message });
@@ -79,7 +85,7 @@ const addToCart = async (req, res, next) => {
         .select();
 
       if (error) return res.status(400).json({ error: error.message });
-      return res.json({ success: true, message: 'Cart updated', data });
+      return res.json({ success: true, message: 'Cart updated successfully', data });
     } else {
       // If it doesn't exist, insert a fresh row
       const { data, error } = await supabase
@@ -88,7 +94,7 @@ const addToCart = async (req, res, next) => {
         .select();
 
       if (error) return res.status(400).json({ error: error.message });
-      return res.status(201).json({ success: true, message: 'Added to cart', data });
+      return res.status(201).json({ success: true, message: 'Added to cart successfully', data });
     }
   } catch (error) {
     next(error);
