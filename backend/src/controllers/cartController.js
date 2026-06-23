@@ -1,66 +1,48 @@
 const supabase = require('../config/supabase');
 
-// @GET /api/cart - Retrieves all active items in a user's shopping basket
+// @GET /api/cart - Retrieves all active items in a user's shopping basket safely
 const getCart = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
-    // 1. Try fetching with 'products' (plural) foreign key relationship mapping
-    let { data: cartItems, error } = await supabase
+    // 1. Try a completely flat fetch first to ensure we don't break authentication loops
+    const { data: rawCart, error: fetchError } = await supabase
       .from('cart')
-      .select(`
-        id,
-        quantity,
-        product_id,
-        products (
-          id,
-          name,
-          price,
-          image_url
-        )
-      `)
+      .select('id, quantity, product_id')
       .eq('user_id', userId);
 
-    // 2. Fallback: If plural fails, instantly try singular 'product' relationship mapping
-    if (error) {
-      const fallback = await supabase
-        .from('cart')
-        .select(`
-          id,
-          quantity,
-          product_id,
-          product (
-            id,
-            name,
-            price,
-            image_url
-          )
-        `)
-        .eq('user_id', userId);
-      
-      if (!fallback.error) {
-        // Normalize the key name so the frontend always sees '.products'
-        cartItems = (fallback.data || []).map(item => ({
-          ...item,
-          products: item.product
-        }));
-        error = null;
-      }
+    if (fetchError) {
+      return res.status(400).json({ error: fetchError.message });
     }
 
-    // If both lookups fail completely, pass the true database error message back
-    if (error) {
-      return res.status(400).json({ error: error.message });
+    if (!rawCart || rawCart.length === 0) {
+      return res.json({ success: true, cartItems: [], total: 0 });
     }
 
-    // 3. Calculate subtotal aggregates safely
-    const total = (cartItems || []).reduce((sum, item) => {
+    // 2. Fetch all products matching the product IDs in the cart manually to bypass strict relation foreign key naming bugs
+    const productIds = rawCart.map(item => item.product_id);
+    const { data: products, error: productError } = await supabase
+      .from('products') // 👈 If your table is singular, change this to 'product'
+      .select('id, name, price, image_url')
+      .in('id', productIds);
+
+    // 3. Combine them manually in Javascript
+    const cartItems = rawCart.map(item => {
+      const matchedProduct = products?.find(p => p.id === item.product_id) || null;
+      return {
+        ...item,
+        products: matchedProduct
+      };
+    });
+
+    // 4. Calculate total aggregates safely
+    const total = cartItems.reduce((sum, item) => {
       const price = Number(item.products?.price) || 0;
       const qty = Number(item.quantity) || 0;
       return sum + (price * qty);
     }, 0);
 
-    res.json({ success: true, cartItems: cartItems || [], total });
+    return res.json({ success: true, cartItems, total });
   } catch (error) {
     next(error);
   }
