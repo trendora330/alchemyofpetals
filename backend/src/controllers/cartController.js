@@ -15,7 +15,8 @@ const getCart = async (req, res, next) => {
         products (
           id,
           name,
-          price
+          price,
+          image_url
         )
       `)
       .eq('user_id', userId);
@@ -31,7 +32,8 @@ const getCart = async (req, res, next) => {
           product (
             id,
             name,
-            price
+            price,
+            image_url
           )
         `)
         .eq('user_id', userId);
@@ -64,4 +66,51 @@ const getCart = async (req, res, next) => {
   }
 };
 
-module.exports = { getCart };
+// @POST /api/cart - Adds an item to the shopping basket or increments its quantity
+const addToCart = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { productId, quantity = 1 } = req.body;
+
+    if (!productId) {
+      return res.status(400).json({ error: 'Product ID is required' });
+    }
+
+    // Check if the item is already in the user's cart
+    const { data: existingItem, error: fetchError } = await supabase
+      .from('cart')
+      .select('id, quantity')
+      .eq('user_id', userId)
+      .eq('product_id', productId)
+      .maybeSingle(); // Safely handle single row selection
+
+    if (fetchError) {
+      return res.status(400).json({ error: fetchError.message });
+    }
+
+    if (existingItem) {
+      // If it exists, increment the quantity
+      const { data, error } = await supabase
+        .from('cart')
+        .update({ quantity: existingItem.quantity + Number(quantity) })
+        .eq('id', existingItem.id)
+        .select();
+
+      if (error) return res.status(400).json({ error: error.message });
+      return res.json({ success: true, message: 'Cart updated', data });
+    } else {
+      // If it doesn't exist, insert a fresh row
+      const { data, error } = await supabase
+        .from('cart')
+        .insert([{ user_id: userId, product_id: productId, quantity: Number(quantity) }])
+        .select();
+
+      if (error) return res.status(400).json({ error: error.message });
+      return res.status(201).json({ success: true, message: 'Added to cart', data });
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { getCart, addToCart };

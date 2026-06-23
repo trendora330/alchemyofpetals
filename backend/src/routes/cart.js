@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { getCart } = require('../controllers/cartController');
+const { getCart, addToCart } = require('../controllers/cartController');
 const { protect } = require('../middleware/auth');
 
-// Protect the entire cart sub-tree behind the user authentication token gate
+// Protect both shopping basket operations behind the user token barrier
 router.get('/', protect, getCart);
+router.post('/', protect, addToCart);
 
 module.exports = router;
