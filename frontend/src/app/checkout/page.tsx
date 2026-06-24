@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Minus, Plus, Trash2, ShoppingBag, Truck, Lock } from 'lucide-react';
 
-// Define the structural interfaces for TypeScript safety
 interface ProductDetails {
   id: string;
   name: string;
@@ -28,7 +27,6 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Form states for shipment operations
   const [shippingDetails, setShippingDetails] = useState({
     name: '',
     phone: '',
@@ -37,10 +35,9 @@ export default function CheckoutPage() {
     pincode: ''
   });
 
-  // 🌸 FIXED: Using relative paths so Next.js passes local storage cookies and session headers natively
-  const API_URL = '';
+  // ✅ Read directly from the same environment configuration your working header uses
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://alchemy-backend-kmjb.onrender.com';
 
-  // Fetch the current shopping cart state matrix from the backend engine
   const fetchCart = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -66,19 +63,17 @@ export default function CheckoutPage() {
     fetchCart();
   }, []);
 
-  // Strict priority quantity modifier pipeline
   const updateQuantity = async (productId: string, currentQty: number, delta: number, actionType?: string) => {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      // Make a clean POST sync request passing explicit delta and keyword signals
       const response = await axios.post(
         `${API_URL}/api/cart`,
         {
           productId,
-          quantity: delta,       // Passes relative adjustment (-1 or 1)
-          action: actionType     // Explicit priority routing keyword ('decrease' or 'increase')
+          quantity: delta,       
+          action: actionType     
         },
         {
           headers: { Authorization: `Bearer ${token}` }
@@ -86,7 +81,6 @@ export default function CheckoutPage() {
       );
 
       if (response.data.success) {
-        // Re-fetch the verified database values instantly to sync layouts perfectly
         await fetchCart();
       }
     } catch (err) {
@@ -94,13 +88,11 @@ export default function CheckoutPage() {
     }
   };
 
-  // Directly drop an item entirely from the database cart table
   const removeItemCompletely = async (cartItemId: string) => {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      // Hits the parametric DELETE endpoint we deployed on Render
       const response = await axios.delete(`${API_URL}/api/cart/${cartItemId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -125,7 +117,7 @@ export default function CheckoutPage() {
     <div className="min-h-screen bg-[#FDFBF7] py-12 px-4 sm:px-6 lg:px-8 font-sans text-gray-900">
       <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        {/* Left Column: Selection list and Shipping parameters */}
+        {/* Left Column */}
         <div className="lg:col-span-7 space-y-6">
           
           {/* Card Item List */}
@@ -259,7 +251,7 @@ export default function CheckoutPage() {
 
         </div>
 
-        {/* Right Column: Checkout Summary Aggregates */}
+        {/* Right Column */}
         <div className="lg:col-span-5">
           <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm sticky top-6 space-y-6">
             <h2 className="text-xl font-bold text-[#1E3A2F]">Summary</h2>
