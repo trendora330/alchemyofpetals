@@ -1,14 +1,13 @@
 const supabase = require('../config/supabase');
 
-// @GET /api/cart - Retrieves all active items in a user's shopping basket safely
+// @GET /api/cart - Safe mapping that covers all frontend schema variations
 const getCart = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
-    // 1. Fetch flat rows from the cart table
     const { data: rawCart, error: fetchError } = await supabase
       .from('cart')
-      .select('id, quantity, product_id')
+      .select('*') // Pull all raw columns including id, user_id, product_id, created_at
       .eq('user_id', userId);
 
     if (fetchError) {
@@ -19,26 +18,44 @@ const getCart = async (req, res, next) => {
       return res.json({ success: true, cartItems: [], total: 0 });
     }
 
-    // 2. Query the products table to match details
-    const productIds = rawCart.map(item => item.product_id);
+    const productIds = rawCart.map(item => item.product_id || item.productId);
     const { data: products, error: productError } = await supabase
       .from('products') 
-      .select('id, name, price, image_url')
-      .in('id', productIds);
+      .select('*'); // Pull all columns to catch description, name, price, imageUrl, image_url
 
-    // 3. Map values into BOTH singular and plural fields to prevent frontend compilation mismatch
     const cartItems = rawCart.map(item => {
-      const matchedProduct = products?.find(p => p.id === item.product_id) || null;
+      const currentProductId = item.product_id || item.productId;
+      const dbProduct = products?.find(p => p.id === currentProductId) || null;
+
+      // Create a unified product object that satisfies both snake_case and camelCase
+      const unifiedProduct = dbProduct ? {
+        ...dbProduct,
+        id: dbProduct.id,
+        _id: dbProduct.id,
+        productId: dbProduct.id,
+        product_id: dbProduct.id,
+        name: dbProduct.name || dbProduct.title,
+        price: Number(dbProduct.price) || 0,
+        image_url: dbProduct.image_url || dbProduct.imageUrl,
+        imageUrl: dbProduct.imageUrl || dbProduct.image_url
+      } : null;
+
+      // Return the item row with every possible structure your frontend array filters might search for
       return {
         ...item,
-        product: matchedProduct,  // 🌸 Cover singular frontend mapping cases
-        products: matchedProduct  // 🌸 Cover plural frontend mapping cases
+        id: item.id,            // Unique cart row ID
+        _id: item.id,           // Fallback MongoDB style ID
+        product_id: currentProductId,
+        productId: currentProductId,
+        quantity: Number(item.quantity) || 1,
+        product: unifiedProduct,  // Singular fallback
+        products: unifiedProduct  // Plural fallback
       };
     });
 
-    // 4. Calculate grand total aggregates using numbers cleanly
     const total = cartItems.reduce((sum, item) => {
-      const price = Number(item.product?.price || item.products?.price) || 0;
+      const targetProduct = item.product || item.products;
+      const price = Number(targetProduct?.price) || 0;
       const qty = Number(item.quantity) || 0;
       return sum + (price * qty);
     }, 0);
