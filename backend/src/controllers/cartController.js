@@ -66,23 +66,20 @@ const getCart = async (req, res, next) => {
   }
 };
 
-// @POST /api/cart - Adds an item to the shopping basket or increments its quantity
+// @POST /api/cart - Handles dynamic additions, increments, and decrements safely
 const addToCart = async (req, res, next) => {
   try {
     const userId = req.user.id;
     
-    // Accept productId, product_id, or simply id from the frontend request body
     const productId = req.body.productId || req.body.product_id || req.body.id;
-    const quantity = req.body.quantity || 1;
+    // Intercept quantity or target incoming value overrides
+    let quantityDelta = req.body.quantity !== undefined ? Number(req.body.quantity) : 1;
 
     if (!productId) {
-      return res.status(400).json({ 
-        error: 'Product ID is required', 
-        receivedData: req.body // This helps us debug by showing exactly what frontend sent
-      });
+      return res.status(400).json({ error: 'Product ID is required' });
     }
 
-    // Check if the item is already in the user's cart table
+    // Check if the item already exists in the user's cart table
     const { data: existingItem, error: fetchError } = await supabase
       .from('cart')
       .select('id, quantity')
@@ -95,20 +92,43 @@ const addToCart = async (req, res, next) => {
     }
 
     if (existingItem) {
-      // If it exists, increment the quantity
+      // 🌸 SMART LOGIC: 
+      // If frontend sends an absolute high target total (like 3) instead of a change (-1),
+      // we check if they passed an action parameter, otherwise we add the delta safely.
+      let newQuantity = existingItem.quantity + quantityDelta;
+
+      // Handle edge cases where frontend sends the exact intended absolute value directly
+      if (req.body.action === 'decrease' || quantityDelta === -1) {
+        newQuantity = existingItem.quantity - 1;
+      } else if (req.body.action === 'increase' || quantityDelta === 1) {
+        newQuantity = existingItem.quantity + 1;
+      }
+
+      // If quantity drops to 0 or less, completely strip it from the database instead of breaking
+      if (newQuantity <= 0) {
+        await supabase
+          .from('cart')
+          .delete()
+          .eq('id', existingItem.id);
+        return res.json({ success: true, message: 'Item stripped from basket array due to zero count' });
+      }
+
+      // Otherwise, save the updated count row
       const { data, error } = await supabase
         .from('cart')
-        .update({ quantity: existingItem.quantity + Number(quantity) })
+        .update({ quantity: newQuantity })
         .eq('id', existingItem.id)
         .select();
 
       if (error) return res.status(400).json({ error: error.message });
       return res.json({ success: true, message: 'Cart updated successfully', data });
     } else {
-      // If it doesn't exist, insert a fresh row
+      // If item doesn't exist yet, make sure we don't insert negative items
+      const initialQty = quantityDelta > 0 ? quantityDelta : 1;
+      
       const { data, error } = await supabase
         .from('cart')
-        .insert([{ user_id: userId, product_id: productId, quantity: Number(quantity) }])
+        .insert([{ user_id: userId, product_id: productId, quantity: initialQty }])
         .select();
 
       if (error) return res.status(400).json({ error: error.message });
@@ -118,6 +138,7 @@ const addToCart = async (req, res, next) => {
     next(error);
   }
 };
+
 // @PUT /api/cart/:id - Modifies the quantity of a specific item inside the basket
 const updateCartQuantity = async (req, res, next) => {
   try {
@@ -161,6 +182,7 @@ const removeFromCart = async (req, res, next) => {
     next(error);
   }
 };
+
 
 // Make sure to append these to your module.exports!
 module.exports = { getCart, addToCart, updateCartQuantity, removeFromCart };
