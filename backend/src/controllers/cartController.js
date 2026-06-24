@@ -118,5 +118,49 @@ const addToCart = async (req, res, next) => {
     next(error);
   }
 };
+// @PUT /api/cart/:id - Modifies the quantity of a specific item inside the basket
+const updateCartQuantity = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const cartItemId = req.params.id; // Reads the ID directly from the URL path
+    const { quantity } = req.body;
 
-module.exports = { getCart, addToCart };
+    if (!quantity || Number(quantity) < 1) {
+      return res.status(400).json({ error: 'Valid quantity is required' });
+    }
+
+    const { data, error } = await supabase
+      .from('cart')
+      .update({ quantity: Number(quantity) })
+      .eq('id', cartItemId)
+      .eq('user_id', userId) // Security check: Ensure this cart item belongs to the logged-in user
+      .select();
+
+    if (error) return res.status(400).json({ error: error.message });
+    return res.json({ success: true, message: 'Quantity modified successfully', data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @DELETE /api/cart/:id - Completely drops a specific item row from the basket matrix
+const removeFromCart = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const cartItemId = req.params.id;
+
+    const { error } = await supabase
+      .from('cart')
+      .delete()
+      .eq('id', cartItemId)
+      .eq('user_id', userId);
+
+    if (error) return res.status(400).json({ error: error.message });
+    return res.json({ success: true, message: 'Item stripped from basket array successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Make sure to append these to your module.exports!
+module.exports = { getCart, addToCart, updateCartQuantity, removeFromCart };
