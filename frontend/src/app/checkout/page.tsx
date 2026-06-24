@@ -1,289 +1,292 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Plus, Minus, Trash2, ShoppingBag } from 'lucide-react';
-import api from '../lib/api';
-import useStore from '../store/useStore';
 
-declare global {
-  interface Window {
-    Razorpay: any;
-  }
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { Minus, Plus, Trash2, ShoppingBag, Truck, Lock } from 'lucide-react';
+
+// Define the structural interfaces for TypeScript safety
+interface ProductDetails {
+  id: string;
+  name: string;
+  price: number;
+  image_url?: string;
+  imageUrl?: string;
+}
+
+interface CartItem {
+  id: string;
+  product_id: string;
+  productId: string;
+  quantity: number;
+  product?: ProductDetails;
+  products?: ProductDetails;
 }
 
 export default function CheckoutPage() {
-  const router = useRouter();
-  const { user, cartItems, cartTotal, setCart, token } = useStore();
-  const [loading, setLoading] = useState(false);
-  const [fetchingCart, setFetchingCart] = useState(true);
-  
-  const [address, setAddress] = useState({
-    name: user?.name || '',
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [total, setTotal] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Form states for shipment operations
+  const [shippingDetails, setShippingDetails] = useState({
+    name: '',
     phone: '',
-    address_line: '',
+    address: '',
     city: '',
-    state: '',
-    pincode: '',
+    pincode: ''
   });
 
-  // 1. Sync and fetch the user's real live database cart state on page mount
-  useEffect(() => {
-    if (!token) {
-      router.push('/login');
-      return;
-    }
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://alchemy-backend-kmjb.onrender.com';
 
-    api.get('/cart')
-      .then((res) => {
-        setCart(res.data.cartItems, res.data.total);
-      })
-      .catch((err) => console.error('Error synchronizing basket:', err))
-      .finally(() => setFetchingCart(false));
-  }, [token, setCart, router]);
-
-  const shipping = cartTotal >= 500 || cartTotal === 0 ? 0 : 50;
-  const grandTotal = cartTotal + shipping;
-
-  // 2. Interactive Controls: Handle inline item additions/subtractions
-  const updateQuantity = async (productId: string, currentQty: number, adjustment: number) => {
-    const targetQty = currentQty + adjustment;
-    if (targetQty <= 0) return;
-
+  // Fetch the current shopping cart state matrix from the backend engine
+  const fetchCart = async () => {
     try {
-      await api.post('/cart', { product_id: productId, quantity: targetQty });
-      const res = await api.get('/cart');
-      setCart(res.data.cartItems, res.data.total);
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Could not update quantity allocation.');
-    }
-  };
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('No active authentication token detected.');
 
-  const removeLineItem = async (cartRowId: string) => {
-    try {
-      await api.delete(`/cart/${cartRowId}`);
-      const res = await api.get('/cart');
-      setCart(res.data.cartItems, res.data.total);
-    } catch (err) {
-      alert('Could not strip item from basket array.');
-    }
-  };
+      const response = await axios.get(`${API_URL}/api/cart`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
-  // Razorpay injection helper script
-  const loadScript = (src: string) => {
-    return new Promise((resolve) => {
-      const script = document.createElement('script');
-      script.src = src;
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-  };
-
-  const handlePayment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!address.phone || !address.address_line || !address.pincode) {
-      alert('Please fill out your delivery address and contact phone number! 📦');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const orderRes = await api.post('/payments/create-order');
-      const { order, key_id } = orderRes.data;
-
-      const scriptLoaded = await loadScript('https://checkout.razorpay.com/v1/checkout.js');
-      if (!scriptLoaded) {
-        alert('Razorpay payment gateway client failed to load.');
-        return;
+      if (response.data.success) {
+        setCartItems(response.data.cartItems || []);
+        setTotal(response.data.total || 0);
       }
-
-      const options = {
-        key: key_id,
-        amount: order.amount,
-        currency: 'INR',
-        name: 'Alchemy of Petals',
-        description: 'Secure Plant Nursery Purchase 🌿🌸',
-        order_id: order.id,
-        handler: async function (response: any) {
-          try {
-            const verifyRes = await api.post('/payments/verify', {
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            });
-
-            if (verifyRes.data.success) {
-              setCart([], 0);
-              alert('Transaction Complete! Your plant order has been safely placed. 🎉');
-              router.push('/');
-            }
-          } catch (verifyErr) {
-            alert('Payment validation check failed.');
-          }
-        },
-        prefill: {
-          name: address.name,
-          email: user?.email || '',
-          contact: address.phone,
-        },
-        theme: { color: '#2D6A4F' },
-      };
-
-      const paymentWindow = new window.Razorpay(options);
-      paymentWindow.open();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Could not instantiate payment checkout order.');
+      console.error('Error fetching cart:', err);
+      setError(err.response?.data?.error || 'Failed to populate plant selection items.');
     } finally {
       setLoading(false);
     }
   };
 
-  if (fetchingCart) {
+  useEffect(() => {
+    fetchCart();
+  }, []);
+
+  // Strict priority quantity modifier pipeline
+  const updateQuantity = async (productId: string, currentQty: number, delta: number, actionType?: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      // Make a clean POST sync request passing explicit delta and keyword signals
+      const response = await axios.post(
+        `${API_URL}/api/cart`,
+        {
+          productId,
+          quantity: delta,       // Passes relative adjustment (-1 or 1)
+          action: actionType     // Explicit priority routing keyword ('decrease' or 'increase')
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+
+      if (response.data.success) {
+        // Re-fetch the verified database values instantly to sync layouts perfectly
+        await fetchCart();
+      }
+    } catch (err) {
+      console.error('Quantity modifier pipeline execution failure:', err);
+    }
+  };
+
+  // Directly drop an item entirely from the database cart table
+  const removeItemCompletely = async (cartItemId: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      // Hits the parametric DELETE endpoint we deployed on Render
+      const response = await axios.delete(`${API_URL}/api/cart/${cartItemId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.data.success) {
+        await fetchCart();
+      }
+    } catch (err) {
+      console.error('Could not strip item from basket array:', err);
+    }
+  };
+
+  if (loading) {
     return (
-      <div className="min-h-screen bg-[#FEFAE0] flex items-center justify-center">
-        <div className="text-center font-bold text-[#2D6A4F] animate-pulse">Synchronizing Nursery Basket...</div>
+      <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center">
+        <p className="text-gray-500 font-medium">Loading your green basket components...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#FEFAE0] text-gray-900 py-12 px-4">
-      <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+    <div className="min-h-screen bg-[#FDFBF7] py-12 px-4 sm:px-6 lg:px-8 font-sans text-gray-900">
+      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        {/* Left Aspect: Dynamic Item List & Address Forms (Column Span: 7) */}
+        {/* Left Column: Selection list and Shipping parameters */}
         <div className="lg:col-span-7 space-y-6">
           
-          {/* Dynamic Interactive Basket Content Layout */}
-          <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-200">
-            <h2 className="font-serif text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <ShoppingBag className="w-6 h-6 text-[#2D6A4F]" /> Your Plant Selection
+          {/* Card Item List */}
+          <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+            <h2 className="text-xl font-bold text-[#1E3A2F] flex items-center gap-2 mb-6">
+              <ShoppingBag className="w-5 h-5" /> Your Plant Selection
             </h2>
 
             {cartItems.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
-                <p className="mb-4">Your basket is empty.</p>
-                <button onClick={() => router.push('/')} className="bg-[#2D6A4F] text-white px-4 py-2 rounded-xl text-sm font-bold">
-                  Browse Garden
-                </button>
-              </div>
+              <p className="text-gray-400 text-center py-8">Your plant basket is empty.</p>
             ) : (
-              <div className="divide-y divide-gray-100 max-h-80 overflow-y-auto pr-2">
-                {cartItems.map((item) => (
-                  <div key={item.id} className="py-4 flex items-center justify-between gap-4">
-                    <div className="flex-1">
-                      <h4 className="font-serif font-bold text-gray-900 leading-tight">{item.products?.name}</h4>
-                      <p className="text-sm text-gray-500 mt-0.5">₹{item.products?.price} each</p>
-                    </div>
+              <div className="space-y-4">
+                {cartItems.map((item) => {
+                  const product = item.product || item.products;
+                  if (!product) return null;
 
-                    {/* Quantity Selector Layout Node */}
-                    <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1 border border-gray-200">
-                      <button 
-                        type="button" onClick={() => updateQuantity(item.product_id, item.quantity, -1)}
-                        className="p-1 hover:bg-white rounded transition-colors text-gray-600"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="w-6 text-center text-sm font-bold text-gray-800">{item.quantity}</span>
-                      <button 
-                        type="button" onClick={() => updateQuantity(item.product_id, item.quantity, 1)}
-                        className="p-1 hover:bg-white rounded transition-colors text-gray-600"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                  return (
+                    <div key={item.id} className="flex items-center justify-between border-b border-gray-50 pb-4 last:border-0 last:pb-0">
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 bg-gray-50 rounded-xl overflow-hidden flex items-center justify-center text-xs text-gray-400">
+                          {product.image_url || product.imageUrl ? (
+                            <img 
+                              src={product.image_url || product.imageUrl} 
+                              alt={product.name} 
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            '🪴'
+                          )}
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-800">{product.name}</h3>
+                          <p className="text-sm text-gray-400">₹{product.price} each</p>
+                        </div>
+                      </div>
 
-                    {/* Line Total and Purge Row Target */}
-                    <div className="text-right flex items-center gap-3">
-                      <span className="font-bold text-gray-900 min-w-[50px]">
-                        ₹{item.products ? item.products.price * item.quantity : 0}
-                      </span>
-                      <button 
-                        type="button" onClick={() => removeLineItem(item.id)}
-                        className="text-gray-400 hover:text-red-600 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {/* Interactive Counters */}
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center bg-gray-50 border border-gray-100 rounded-lg p-1 gap-2">
+                          <button 
+                            type="button" 
+                            onClick={() => updateQuantity(product.id, item.quantity, -1, 'decrease')}
+                            className="p-1 hover:bg-white rounded transition-colors text-gray-600 shadow-none"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="text-sm font-bold text-gray-700 px-1 w-4 text-center">{item.quantity}</span>
+                          <button 
+                            type="button" 
+                            onClick={() => updateQuantity(product.id, item.quantity, 1, 'increase')}
+                            className="p-1 hover:bg-white rounded transition-colors text-gray-600 shadow-none"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <span className="font-semibold text-gray-800 min-w-[3.5rem] text-right">
+                          ₹{product.price * item.quantity}
+                        </span>
+                        <button 
+                          type="button"
+                          onClick={() => removeItemCompletely(item.id)}
+                          className="text-gray-300 hover:text-red-500 transition-colors p-1"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
 
-          {/* Delivery Configuration Input Matrix */}
-          <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-200">
-            <h2 className="font-serif text-2xl font-bold text-gray-900 mb-4">Shipping Details</h2>
-            <form onSubmit={handlePayment} id="checkout-form" className="space-y-4">
+          {/* Shipping Form Wrapper */}
+          <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+            <h2 className="text-xl font-bold text-[#1E3A2F] mb-6">Shipping Details</h2>
+            <form className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Recipient Name</label>
-                <input
-                  type="text" required value={address.name}
-                  onChange={(e) => setAddress({ ...address, name: e.target.value })}
-                  className="w-full border rounded-xl px-4 py-2.5 bg-gray-50 focus:ring-2 focus:ring-forest-600 outline-none text-sm"
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Recipient Name</label>
+                <input 
+                  type="text" 
+                  value={shippingDetails.name}
+                  onChange={(e) => setShippingDetails({...shippingDetails, name: e.target.value})}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#1E3A2F] transition-colors" 
+                  placeholder="Dev" 
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Phone Number</label>
-                <input
-                  type="tel" required placeholder="10-digit mobile number" value={address.phone}
-                  onChange={(e) => setAddress({ ...address, phone: e.target.value })}
-                  className="w-full border rounded-xl px-4 py-2.5 bg-gray-50 focus:ring-2 focus:ring-forest-600 outline-none text-sm"
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Phone Number</label>
+                <input 
+                  type="text" 
+                  value={shippingDetails.phone}
+                  onChange={(e) => setShippingDetails({...shippingDetails, phone: e.target.value})}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#1E3A2F] transition-colors" 
+                  placeholder="10-digit mobile number" 
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nursery Delivery Address</label>
-                <textarea
-                  required placeholder="House No, Street name, Area, LandMark" value={address.address_line}
-                  onChange={(e) => setAddress({ ...address, address_line: e.target.value })}
-                  className="w-full border rounded-xl px-4 py-2.5 bg-gray-50 h-16 focus:ring-2 focus:ring-forest-600 outline-none text-sm"
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Nursery Delivery Address</label>
+                <textarea 
+                  rows={3}
+                  value={shippingDetails.address}
+                  onChange={(e) => setShippingDetails({...shippingDetails, address: e.target.value})}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#1E3A2F] transition-colors resize-none" 
+                  placeholder="House No, Street name, Area, LandMark"
                 />
               </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">City</label>
-                  <input
-                    type="text" required value={address.city}
-                    onChange={(e) => setAddress({ ...address, city: e.target.value })}
-                    className="w-full border rounded-xl px-4 py-2.5 bg-gray-50 text-sm"
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">City</label>
+                  <input 
+                    type="text" 
+                    value={shippingDetails.city}
+                    onChange={(e) => setShippingDetails({...shippingDetails, city: e.target.value})}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#1E3A2F] transition-colors" 
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Pincode</label>
-                  <input
-                    type="text" required maxLength={6} placeholder="PIN" value={address.pincode}
-                    onChange={(e) => setAddress({ ...address, pincode: e.target.value })}
-                    className="w-full border rounded-xl px-4 py-2.5 bg-gray-50 text-sm"
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Pincode</label>
+                  <input 
+                    type="text" 
+                    value={shippingDetails.pincode}
+                    onChange={(e) => setShippingDetails({...shippingDetails, pincode: e.target.value})}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#1E3A2F] transition-colors" 
+                    placeholder="PIN" 
                   />
                 </div>
               </div>
             </form>
           </div>
+
         </div>
 
-        {/* Right Aspect: Static Order Summary Layout Card (Column Span: 5) */}
+        {/* Right Column: Checkout Summary Aggregates */}
         <div className="lg:col-span-5">
-          <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-200 sticky top-6">
-            <h2 className="font-serif text-2xl font-bold text-gray-900 mb-4">Summary</h2>
-            <div className="border-b pb-4 space-y-2 text-sm">
-              <div className="flex justify-between text-gray-600">
+          <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm sticky top-6 space-y-6">
+            <h2 className="text-xl font-bold text-[#1E3A2F]">Summary</h2>
+            
+            <div className="space-y-3 text-sm border-b border-gray-100 pb-4">
+              <div className="flex justify-between text-gray-500">
                 <span>Plant Basket Subtotal</span>
-                <span className="font-semibold text-gray-900">₹{cartTotal}</span>
+                <span className="font-semibold text-gray-800">₹{total}</span>
               </div>
-              <div className="flex justify-between text-gray-600">
+              <div className="flex justify-between text-gray-500">
                 <span>Delivery Logistics</span>
-                <span className="font-semibold text-gray-900">{shipping === 0 ? 'FREE' : `₹${shipping}`}</span>
+                <span className="font-bold text-green-600 flex items-center gap-1">
+                  <Truck className="w-4 h-4" /> FREE
+                </span>
               </div>
-            </div>
-            <div className="flex justify-between items-baseline pt-4 mb-6">
-              <span className="font-serif text-lg font-bold text-gray-900">Grand Total:</span>
-              <span className="text-2xl font-bold text-[#2D6A4F]">₹{grandTotal}</span>
             </div>
 
-            <button
-              type="submit" form="checkout-form" disabled={loading || cartTotal === 0}
-              className="w-full bg-[#2D6A4F] text-white font-bold py-3.5 rounded-xl hover:bg-[#1b4332] transition-colors disabled:opacity-40 shadow-sm text-sm"
+            <div className="flex justify-between items-center">
+              <span className="text-lg font-bold text-[#1E3A2F]">Grand Total:</span>
+              <span className="text-2xl font-black text-[#1E3A2F]">₹{total}</span>
+            </div>
+
+            <button 
+              type="button"
+              disabled={cartItems.length === 0}
+              className="w-full bg-[#1E3A2F] hover:bg-[#152921] disabled:bg-gray-200 text-white font-semibold py-4 rounded-xl transition-all shadow-sm hover:shadow flex items-center justify-center gap-2"
             >
-              {loading ? 'Processing Securely...' : `🔒 Pay ₹${grandTotal} with Razorpay`}
+              <Lock className="w-4 h-4" /> Pay ₹{total} with Razorpay
             </button>
           </div>
         </div>
