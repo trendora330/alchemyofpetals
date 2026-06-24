@@ -5,7 +5,7 @@ const getCart = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
-    // 1. Try a completely flat fetch first to ensure we don't break authentication loops
+    // 1. Fetch flat rows from the cart table
     const { data: rawCart, error: fetchError } = await supabase
       .from('cart')
       .select('id, quantity, product_id')
@@ -19,25 +19,26 @@ const getCart = async (req, res, next) => {
       return res.json({ success: true, cartItems: [], total: 0 });
     }
 
-    // 2. Fetch all products matching the product IDs in the cart manually to bypass strict relation foreign key naming bugs
+    // 2. Query the products table to match details
     const productIds = rawCart.map(item => item.product_id);
     const { data: products, error: productError } = await supabase
-      .from('products') // 👈 If your table is singular, change this to 'product'
+      .from('products') 
       .select('id, name, price, image_url')
       .in('id', productIds);
 
-    // 3. Combine them manually in Javascript
+    // 3. Map values into BOTH singular and plural fields to prevent frontend compilation mismatch
     const cartItems = rawCart.map(item => {
       const matchedProduct = products?.find(p => p.id === item.product_id) || null;
       return {
         ...item,
-        products: matchedProduct
+        product: matchedProduct,  // 🌸 Cover singular frontend mapping cases
+        products: matchedProduct  // 🌸 Cover plural frontend mapping cases
       };
     });
 
-    // 4. Calculate total aggregates safely
+    // 4. Calculate grand total aggregates using numbers cleanly
     const total = cartItems.reduce((sum, item) => {
-      const price = Number(item.products?.price) || 0;
+      const price = Number(item.product?.price || item.products?.price) || 0;
       const qty = Number(item.quantity) || 0;
       return sum + (price * qty);
     }, 0);
