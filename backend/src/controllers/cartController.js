@@ -66,22 +66,21 @@ const getCart = async (req, res, next) => {
   }
 };
 
-// @POST /api/cart - Ultimate flexible handler for addition, absolute updates, and decrements
+// @POST /api/cart - Strict action-priority handler to prevent race conditions
 const addToCart = async (req, res, next) => {
   try {
     const userId = req.user.id;
     
-    // 1. Identify product reference keys
     const productId = req.body.productId || req.body.product_id || req.body.id;
     if (!productId) {
       return res.status(400).json({ error: 'Product ID is required' });
     }
 
-    // 2. Extract potential quantity or operational signals from the frontend payload
     const rawQuantity = req.body.quantity;
-    const actionSignal = req.body.action || req.body.type || req.body.operation;
+    // Lowercase the action string so we catch 'decrease', 'Decrease', 'DECREASE', etc.
+    const actionSignal = String(req.body.action || req.body.type || req.body.operation || '').toLowerCase();
 
-    // Check if the item already exists in the user's database cart table
+    // Fetch existing cart row
     const { data: existingItem, error: fetchError } = await supabase
       .from('cart')
       .select('id, quantity')
@@ -94,36 +93,43 @@ const addToCart = async (req, res, next) => {
     }
 
     if (existingItem) {
-      let targetQuantity = existingItem.quantity + 1; // Default fallback action fallback: increment
+      let targetQuantity = existingItem.quantity;
 
-      // CASE A: Frontend explicitly told us to decrease/decrement via strings
+      // 🚨 PRIORITY 1: Absolute checks for decreasing/minus actions
       if (
-        actionSignal === 'decrease' || 
-        actionSignal === 'decrement' || 
-        actionSignal === 'minus' || 
+        actionSignal.includes('decrease') || 
+        actionSignal.includes('decrement') || 
+        actionSignal.includes('minus') || 
         rawQuantity === -1
       ) {
         targetQuantity = existingItem.quantity - 1;
-      }
-      // CASE B: Frontend explicitly told us to increase/increment via strings
-      else if (actionSignal === 'increase' || actionSignal === 'increment' || actionSignal === 'plus') {
+      } 
+      // 🚨 PRIORITY 2: Absolute checks for increasing/plus actions
+      else if (
+        actionSignal.includes('increase') || 
+        actionSignal.includes('increment') || 
+        actionSignal.includes('plus')
+      ) {
+        targetQuantity = existingItem.quantity + 1;
+      } 
+      // 🚨 PRIORITY 3: Fallback if the frontend is just pushing an absolute manual input number
+      else if (rawQuantity !== undefined) {
+        targetQuantity = Number(rawQuantity);
+      } else {
+        // Simple default increment if no extra signals are sent
         targetQuantity = existingItem.quantity + 1;
       }
-      // CASE C: Frontend is passing an ABSOLUTE target number (e.g., current is 4, click minus, sends 3)
-      else if (rawQuantity !== undefined && Number(rawQuantity) !== 1) {
-        targetQuantity = Number(rawQuantity);
-      }
 
-      // If calculation determines the cart row drops to 0 or less, strip it cleanly
+      // Safe guard: If quantity drops to 0 or less, strip it from the database table
       if (targetQuantity <= 0) {
         await supabase
           .from('cart')
           .delete()
           .eq('id', existingItem.id);
-        return res.json({ success: true, message: 'Item stripped from basket array due to zero count' });
+        return res.json({ success: true, message: 'Item stripped from basket due to zero count' });
       }
 
-      // Otherwise, save the verified absolute quantity to the database row
+      // Update database row with the stable computed number
       const { data, error } = await supabase
         .from('cart')
         .update({ quantity: targetQuantity })
@@ -134,7 +140,7 @@ const addToCart = async (req, res, next) => {
       return res.json({ success: true, message: 'Cart updated successfully', data });
 
     } else {
-      // If item doesn't exist yet, insert a clean row with an absolute fallback value of 1 or higher
+      // If adding a fresh item to cart, ensure we start with a clean count of 1
       const initialQty = rawQuantity !== undefined && Number(rawQuantity) > 0 ? Number(rawQuantity) : 1;
       
       const { data, error } = await supabase
