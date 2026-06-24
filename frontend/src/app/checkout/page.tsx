@@ -35,14 +35,18 @@ export default function CheckoutPage() {
     pincode: ''
   });
 
-  // ✅ Read directly from the same environment configuration your working header uses
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://alchemy-backend-kmjb.onrender.com';
+  // Read configuration variable
+  const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://alchemy-backend-kmjb.onrender.com';
+  
+  // Clean up URL: If the base URL already has /api at the end, strip it so we don't double it!
+  const API_URL = BASE_URL.endsWith('/api') ? BASE_URL.slice(0, -4) : BASE_URL;
 
   const fetchCart = async () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) throw new Error('No active authentication token detected.');
 
+      // Hits /api/cart cleanly
       const response = await axios.get(`${API_URL}/api/cart`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -68,6 +72,7 @@ export default function CheckoutPage() {
       const token = localStorage.getItem('token');
       if (!token) return;
 
+      // Hits /api/cart cleanly
       const response = await axios.post(
         `${API_URL}/api/cart`,
         {
@@ -93,6 +98,7 @@ export default function CheckoutPage() {
       const token = localStorage.getItem('token');
       if (!token) return;
 
+      // Hits /api/cart/:id cleanly
       const response = await axios.delete(`${API_URL}/api/cart/${cartItemId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
