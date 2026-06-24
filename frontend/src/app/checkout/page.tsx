@@ -37,7 +37,8 @@ export default function CheckoutPage() {
     pincode: ''
   });
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://alchemy-backend-kmjb.onrender.com';
+  // 🌸 FIXED: Using relative paths so Next.js passes local storage cookies and session headers natively
+  const API_URL = '';
 
   // Fetch the current shopping cart state matrix from the backend engine
   const fetchCart = async () => {
