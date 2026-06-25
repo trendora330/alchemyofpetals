@@ -276,50 +276,76 @@ const getAdminDashboard = async (req, res, next) => {
   }
 };
 
-// 🪴 @POST /api/cart/admin/products - Handles both snake_case and camelCase database columns
+// 🪴 @POST /api/cart/admin/products - Bulletproof Fallback Multi-Column Injector
 const adminAddProduct = async (req, res, next) => {
   try {
     const { name, title, price, image_url, imageUrl, description, stock } = req.body;
     const finalImageUrl = image_url || imageUrl || '';
 
-    const { data, error } = await supabase
-      .from('products')
-      .insert([{
-        name: name || title,
-        title: title || name,
-        price: Number(price || 0),
-        image_url: finalImageUrl, // Maps to snake_case
-        imageUrl: finalImageUrl,  // 🔑 Maps to camelCase so it never fails the schema cache!
-        description: description || 'Healthy premium nursery botanical item entry.',
-        stock: Number(stock || 10)
-      }])
-      .select();
+    const baseData = {
+      name: name || title,
+      title: title || name,
+      price: Number(price || 0),
+      description: description || 'Healthy premium nursery botanical item entry.',
+      stock: Number(stock || 10)
+    };
+
+    // Attempt 1: Try inserting with snake_case 'image_url'
+    const payloadSnake = { ...baseData, image_url: finalImageUrl };
+    let { data, error } = await supabase.from('products').insert([payloadSnake]).select();
+
+    // Attempt 2: If cache rejects snake_case, fallback instantly to camelCase 'imageUrl'
+    if (error && (error.message.includes('image_url') || error.message.includes('schema cache'))) {
+      const payloadCamel = { ...baseData, imageUrl: finalImageUrl };
+      const fallbackResult = await supabase.from('products').insert([payloadCamel]).select();
+      data = fallbackResult.data;
+      error = fallbackResult.error;
+    }
+
+    // Attempt 3: If both explicitly named options are blocked, save using a plain 'image' column key alternative
+    if (error && (error.message.includes('imageUrl') || error.message.includes('schema cache'))) {
+      const payloadPlain = { ...baseData, image: finalImageUrl };
+      const plainResult = await supabase.from('products').insert([payloadPlain]).select();
+      data = plainResult.data;
+      error = plainResult.error;
+    }
 
     if (error) return res.status(400).json({ error: error.message });
     return res.status(201).json({ success: true, data });
   } catch (error) { next(error); }
 };
 
-// ✏️ @PUT /api/cart/admin/products/:id
+// ✏️ @PUT /api/cart/admin/products/:id - Bulletproof Fallback Multi-Column Modifier
 const adminModifyProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name, price, image_url, imageUrl, description, stock } = req.body;
     const finalImageUrl = image_url || imageUrl || '';
 
-    const { data, error } = await supabase
-      .from('products')
-      .update({
-        name,
-        title: name,
-        price: Number(price),
-        image_url: finalImageUrl,
-        imageUrl: finalImageUrl, // 🔑 Maps to camelCase here as well
-        description,
-        stock: Number(stock)
-      })
-      .eq('id', id)
-      .select();
+    const baseUpdate = {
+      name,
+      title: name,
+      price: Number(price),
+      description,
+      stock: Number(stock)
+    };
+
+    // Attempt 1: Update via snake_case
+    let { data, error } = await supabase.from('products').update({ ...baseUpdate, image_url: finalImageUrl }).eq('id', id).select();
+
+    // Attempt 2: Fallback to camelCase
+    if (error && (error.message.includes('image_url') || error.message.includes('schema cache'))) {
+      const fallbackResult = await supabase.from('products').update({ ...baseUpdate, imageUrl: finalImageUrl }).eq('id', id).select();
+      data = fallbackResult.data;
+      error = fallbackResult.error;
+    }
+
+    // Attempt 3: Fallback to plain image alternative
+    if (error && (error.message.includes('imageUrl') || error.message.includes('schema cache'))) {
+      const plainResult = await supabase.from('products').update({ ...baseUpdate, image: finalImageUrl }).eq('id', id).select();
+      data = plainResult.data;
+      error = plainResult.error;
+    }
 
     if (error) return res.status(400).json({ error: error.message });
     return res.json({ success: true, data });
