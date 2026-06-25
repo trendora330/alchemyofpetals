@@ -123,7 +123,7 @@ export default function CheckoutPage() {
       // 1. Tell Razorpay parameters to execute 
       // Razorpay mandates numbers in paise currency subunits (Amount * 100)
       const paymentOptions = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_placeholder', // Fallback placeholder if env is syncing
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_T58hnFfDYthPem', // Fallback placeholder if env is syncing
         amount: total * 100, 
         currency: 'INR',
         name: 'Alchemy of Petals',
