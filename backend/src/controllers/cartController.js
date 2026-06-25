@@ -200,6 +200,51 @@ const removeFromCart = async (req, res, next) => {
   }
 };
 
+// 📦 @POST /api/cart/confirm-order - Saves verified checkout records to Supabase and clears cart
+const saveOrder = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { payment_id, order_id, amount, shippingDetails, items } = req.body;
+
+    if (!payment_id || !order_id) {
+      return res.status(400).json({ error: 'Missing critical payment reference tracking metadata.' });
+    }
+
+    // 1. Insert snapshot record into your newly created orders table
+    const { data: orderData, error: orderError } = await supabase
+      .from('orders')
+      .insert([{
+        user_id: userId,
+        payment_id,
+        order_id,
+        amount: Number(amount),
+        recipient_name: shippingDetails.name,
+        phone_number: shippingDetails.phone,
+        delivery_address: shippingDetails.address,
+        city: shippingDetails.city,
+        pincode: shippingDetails.pincode,
+        items: items
+      }])
+      .select();
+
+    if (orderError) {
+      return res.status(400).json({ error: orderError.message });
+    }
+
+    // 2. Clear out the active cart array completely since the purchase went through perfectly
+    await supabase
+      .from('cart')
+      .delete()
+      .eq('user_id', userId);
+
+    return res.json({ success: true, message: 'Order archived permanently in Supabase database instance.', orderData });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Make sure to add saveOrder to your module.exports!
+module.exports = { getCart, addToCart, updateCartQuantity, removeFromCart, createPaymentOrder, saveOrder };
 
 // Make sure to append these to your module.exports!
-module.exports = { getCart, addToCart, updateCartQuantity, removeFromCart };
+
