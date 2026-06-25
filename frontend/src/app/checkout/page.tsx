@@ -99,11 +99,11 @@ export default function CheckoutPage() {
         throw new Error('Could not initialize secure checkout authorization block.');
       }
 
-      // Extract the order metrics and the verified server_total summary
       const { order_id, amount, currency, server_total } = orderResponse.data;
 
       const paymentOptions = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
+        // 🔑 HARDCODED FIX: Put your rzp_test_... key right here so it works 100% of the time!
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_T58hnFfDYthPem',
         amount: amount, 
         currency: currency,
         name: 'Alchemy of Petals',
@@ -112,7 +112,6 @@ export default function CheckoutPage() {
         image: 'https://alchemyofpetals-cyan.vercel.app/favicon.ico',
         handler: async function (response: any) {
           try {
-            // ✅ Sync using the exact server_total value returned from the order response
             const confirmationResponse = await axios.post(
               `${API_URL}/api/cart/confirm-order`,
               {
@@ -132,7 +131,7 @@ export default function CheckoutPage() {
             }
           } catch (confirmError) {
             console.error('Failed to preserve order tracking reference state:', confirmError);
-            alert('Payment captured by bank, but backend database save failed. Please check logs.');
+            alert('Payment captured by bank, but backend database save failed.');
           }
         },
         prefill: {
