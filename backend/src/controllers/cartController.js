@@ -204,4 +204,27 @@ const saveOrder = async (req, res, next) => {
   }
 };
 
-module.exports = { getCart, addToCart, updateCartQuantity, removeFromCart, createPaymentOrder, saveOrder };
+// 📜 @GET /api/cart/orders - Retrieves order history records for the authenticated user
+const getUserOrders = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    // Fetch orders sorted by newest first
+    const { data: orders, error } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.json({ success: true, orders: orders || [] });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Update your module.exports at the bottom to include getUserOrders!
+module.exports = { getCart, addToCart, updateCartQuantity, removeFromCart, createPaymentOrder, saveOrder, getUserOrders };
