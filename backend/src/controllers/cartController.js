@@ -326,17 +326,50 @@ const adminModifyProduct = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-// Append all three new handlers safely into your modules configuration wrapper setup block
-module.exports = { 
-  getCart, 
-  addToCart, 
-  updateCartQuantity, 
-  removeFromCart, 
-  createPaymentOrder, 
-  saveOrder, 
-  getUserOrders,
-  getAdminDashboard,
-  adminAddProduct,
-  adminModifyProduct
+// 📸 @POST /api/cart/admin/upload - Uploads a binary file asset directly into the Supabase public bucket
+const uploadProductImage = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file asset provided for upload processing.' });
+    }
+
+    // Generate a unique filename to prevent collisions inside the bucket
+    const fileExtension = req.file.originalname.split('.').pop();
+    const fileName = `plant_${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExtension}`;
+
+    // Upload the raw buffer memory binary directly to Supabase storage file engine paths
+    const { data, error } = await supabase.storage
+      .from('plant-photos')
+      .upload(fileName, req.file.buffer, {
+        contentType: req.file.mimetype,
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    // Grab the public CDN image URL to return to the frontend interface
+    const { data: publicUrlData } = supabase.storage
+      .from('plant-photos')
+      .getPublicUrl(fileName);
+
+    return res.json({ 
+      success: true, 
+      imageUrl: publicUrlData.publicUrl,
+      message: 'Image successfully hosted in Supabase Storage!' 
+    });
+  } catch (error) {
+    next(error);
+  }
 };
+
+// Append uploadProductImage into the exported modules block list context wrapper
+module.exports = { 
+  getCart, addToCart, updateCartQuantity, removeFromCart, createPaymentOrder, saveOrder, getUserOrders,
+  getAdminDashboard, adminAddProduct, adminModifyProduct, uploadProductImage // 👈 Added here
+};
+
+// Append all three new handlers safely into your modules configuration wrapper setup block
 // Update your module.exports at the bottom to include getUserOrders! 
