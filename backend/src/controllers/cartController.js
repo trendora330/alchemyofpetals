@@ -238,5 +238,101 @@ const getUserOrders = async (req, res, next) => {
     next(error);
   }
 };
+
+// 📊 @GET /api/cart/admin/dashboard - Compiles all metrics, orders, and products for management
+const getAdminDashboard = async (req, res, next) => {
+  try {
+    // 1. Fetch total sales registry snapshots
+    const { data: orders, error: orderError } = await supabase
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    // 2. Fetch total active inventories
+    const { data: products, error: productError } = await supabase
+      .from('products')
+      .select('*')
+      .order('id', { ascending: true });
+
+    if (orderError || productError) {
+      return res.status(400).json({ error: orderError?.message || productError?.message });
+    }
+
+    // 3. Aggregate financial metric milestones
+    const totalRevenue = orders.reduce((sum, order) => sum + Number(order.amount || 0), 0);
+
+    return res.json({
+      success: true,
+      metrics: {
+        totalRevenue,
+        totalOrders: orders.length,
+        totalItemsInCatalog: products.length
+      },
+      orders: orders || [],
+      products: products || []
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// 🪴 @POST /api/cart/admin/products - Injects a brand new product catalog item entry into Supabase
+const adminAddProduct = async (req, res, next) => {
+  try {
+    const { name, title, price, image_url, imageUrl, description, stock } = req.body;
+
+    const { data, error } = await supabase
+      .from('products')
+      .insert([{
+        name: name || title,
+        title: title || name,
+        price: Number(price || 0),
+        image_url: image_url || imageUrl || '',
+        description: description || 'Healthy premium nursery botanical item entry.',
+        stock: Number(stock || 10)
+      }])
+      .select();
+
+    if (error) return res.status(400).json({ error: error.message });
+    return res.status(201).json({ success: true, data });
+  } catch (error) { next(error); }
+};
+
+// ✏️ @PUT /api/cart/admin/products/:id - Modifies an existing plant catalog asset line item entry
+const adminModifyProduct = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { name, price, image_url, description, stock } = req.body;
+
+    const { data, error } = await supabase
+      .from('products')
+      .update({
+        name,
+        title: name,
+        price: Number(price),
+        image_url,
+        description,
+        stock: Number(stock)
+      })
+      .eq('id', id)
+      .select();
+
+    if (error) return res.status(400).json({ error: error.message });
+    return res.json({ success: true, data });
+  } catch (error) { next(error); }
+};
+
+// Append all three new handlers safely into your modules configuration wrapper setup block
+module.exports = { 
+  getCart, 
+  addToCart, 
+  updateCartQuantity, 
+  removeFromCart, 
+  createPaymentOrder, 
+  saveOrder, 
+  getUserOrders,
+  getAdminDashboard,
+  adminAddProduct,
+  adminModifyProduct
+};
 // Update your module.exports at the bottom to include getUserOrders!
-module.exports = { getCart, addToCart, updateCartQuantity, removeFromCart, createPaymentOrder, saveOrder, getUserOrders };
