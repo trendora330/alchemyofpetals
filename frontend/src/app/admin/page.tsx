@@ -39,7 +39,11 @@ export default function AdminDashboard() {
         setNewPlant({ name: '', price: '', image_url: '', stock: '10', description: '' });
         await refreshDashboardState();
       }
-    } catch (err) { console.error(err); }
+    } catch (err: any) {
+      console.error(err);
+      // 👇 ADD THIS LINE to pop up the exact reason Supabase rejected it!
+      alert(`Error adding plant: ${err.response?.data?.error || err.message}`);
+    }
   };
 
   const handleUpdateProductSubmit = async (e: React.FormEvent) => {
