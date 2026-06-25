@@ -276,10 +276,11 @@ const getAdminDashboard = async (req, res, next) => {
   }
 };
 
-// 🪴 @POST /api/cart/admin/products - Injects a brand new product catalog item entry into Supabase
+// 🪴 @POST /api/cart/admin/products - Handles both snake_case and camelCase database columns
 const adminAddProduct = async (req, res, next) => {
   try {
     const { name, title, price, image_url, imageUrl, description, stock } = req.body;
+    const finalImageUrl = image_url || imageUrl || '';
 
     const { data, error } = await supabase
       .from('products')
@@ -287,7 +288,8 @@ const adminAddProduct = async (req, res, next) => {
         name: name || title,
         title: title || name,
         price: Number(price || 0),
-        image_url: image_url || imageUrl || '',
+        image_url: finalImageUrl, // Maps to snake_case
+        imageUrl: finalImageUrl,  // 🔑 Maps to camelCase so it never fails the schema cache!
         description: description || 'Healthy premium nursery botanical item entry.',
         stock: Number(stock || 10)
       }])
@@ -298,11 +300,12 @@ const adminAddProduct = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-// ✏️ @PUT /api/cart/admin/products/:id - Modifies an existing plant catalog asset line item entry
+// ✏️ @PUT /api/cart/admin/products/:id
 const adminModifyProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, price, image_url, description, stock } = req.body;
+    const { name, price, image_url, imageUrl, description, stock } = req.body;
+    const finalImageUrl = image_url || imageUrl || '';
 
     const { data, error } = await supabase
       .from('products')
@@ -310,7 +313,8 @@ const adminModifyProduct = async (req, res, next) => {
         name,
         title: name,
         price: Number(price),
-        image_url,
+        image_url: finalImageUrl,
+        imageUrl: finalImageUrl, // 🔑 Maps to camelCase here as well
         description,
         stock: Number(stock)
       })
@@ -335,4 +339,4 @@ module.exports = {
   adminAddProduct,
   adminModifyProduct
 };
-// Update your module.exports at the bottom to include getUserOrders!
+// Update your module.exports at the bottom to include getUserOrders! 
