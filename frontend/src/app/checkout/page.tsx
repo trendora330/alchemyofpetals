@@ -99,7 +99,8 @@ export default function CheckoutPage() {
         throw new Error('Could not initialize secure checkout authorization block.');
       }
 
-      const { order_id, amount, currency } = orderResponse.data;
+      // Extract the order metrics and the verified server_total summary
+      const { order_id, amount, currency, server_total } = orderResponse.data;
 
       const paymentOptions = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
@@ -111,13 +112,13 @@ export default function CheckoutPage() {
         image: 'https://alchemyofpetals-cyan.vercel.app/favicon.ico',
         handler: async function (response: any) {
           try {
-            // ✅ SUCCESS CALLBACK: Transmit order records directly upstream to save in Supabase
+            // ✅ Sync using the exact server_total value returned from the order response
             const confirmationResponse = await axios.post(
               `${API_URL}/api/cart/confirm-order`,
               {
                 payment_id: response.razorpay_payment_id,
                 order_id: order_id,
-                amount: total,
+                amount: server_total || total,
                 shippingDetails,
                 items: cartItems
               },

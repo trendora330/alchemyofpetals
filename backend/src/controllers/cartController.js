@@ -200,6 +200,54 @@ const removeFromCart = async (req, res, next) => {
   }
 };
 
+// 💳 @POST /api/cart/create-order - Generates verified Razorpay order tokens securely
+const createPaymentOrder = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    // 1. Fetch live cart items to recalculate total securely on the server side
+    const { data: rawCart } = await supabase.from('cart').select('quantity, product_id').eq('user_id', userId);
+    const { data: products } = await supabase.from('products').select('id, price');
+
+    if (!rawCart || rawCart.length === 0) {
+      return res.status(400).json({ error: 'Cannot create an order for an empty basket.' });
+    }
+
+    // Convert everything strictly to rounded numbers to prevent fractional float mismatches
+    const secureTotal = rawCart.reduce((sum, item) => {
+      const p = products?.find(prod => prod.id === item.product_id);
+      const price = Math.round(Number(p?.price || 0));
+      const qty = Number(item.quantity || 1);
+      return sum + (price * qty);
+    }, 0);
+
+    if (secureTotal <= 0) {
+      return res.status(400).json({ error: 'Invalid checkout balance total calculation.' });
+    }
+
+    // 2. Transmit metadata properties directly to Razorpay's system engines
+    const orderOptions = {
+      amount: secureTotal * 100, // Amount in paise subunits (e.g. 34900)
+      currency: 'INR',
+      receipt: `receipt_user_${userId.slice(0, 8)}_${Date.now()}`
+    };
+
+    const order = await razorpayClient.orders.create(orderOptions);
+
+    // Return the absolute server-calculated total back to the frontend so they align 100%
+    return res.json({
+      success: true,
+      order_id: order.id,
+      amount: order.amount, // Return the absolute paise total (e.g. 34900)
+      server_total: secureTotal, // Send back the flat Rupee total (e.g. 349)
+      currency: order.currency
+    });
+  } catch (error) {
+    console.error('Order creation failed:', error);
+    return res.status(500).json({ error: error.message || 'Failed to initialize system payment order.' });
+  }
+};
+
 // 📦 @POST /api/cart/confirm-order - Saves verified checkout records to Supabase and clears cart
 const saveOrder = async (req, res, next) => {
   try {
