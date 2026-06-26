@@ -1,128 +1,93 @@
-const supabase = require('../config/supabase');
+const { createClient } = require('@supabase/supabase-js');
 const jwt = require('jsonwebtoken');
 
-// @POST /api/auth/register
+// Initialize internal configuration states safely from process environment files
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+const jwtSecret = process.env.JWT_SECRET || 'your-fallback-jwt-secret-string';
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// 📝 @POST /api/auth/register - Maps names directly onto user metadata registries
 const register = async (req, res, next) => {
   try {
-    const { name, email, password } = req.body;
+    const { email, password, name } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'All fields (name, email, password) are mandatory' });
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Please provide both email and password parameters.' });
     }
 
-    // 1. Check if user profile already exists in our profiles table
-    const { data: existingUser, error: checkError } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('email', email)
-      .maybeSingle(); // 🧠 Using maybeSingle safely instead of .substring()
-
-    if (existingUser) {
-      return res.status(400).json({ error: 'This email is already registered' });
-    }
-
-    // 2. Sign up the user into Supabase's managed Auth system
-    const { data: authData, error: authError } = await supabase.auth.signUp({
+    // Capture the name and bind it safely inside option details metadata arrays
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          name: name || email.split('@')[0],
+          full_name: name || email.split('@')[0],
+          role: 'buyer' // Assign standard shopper privileges by default
+        }
+      }
     });
 
-    if (authError || !authData.user) {
-      return res.status(400).json({ error: authError?.message || 'Authentication signup registration failed' });
+    if (error) {
+      return res.status(400).json({ error: error.message });
     }
 
-    // 3. Create the profile row matching the generated Auth UUID
-    // Note: By default, new signups are marked as 'customer'. You can manually switch this to 'admin' in your database.
-    const { data: newProfile, error: profileError } = await supabase
-      .from('profiles')
-      .insert([
-        {
-          id: authData.user.id,
-          name,
-          email,
-          role: 'customer', 
-        },
-      ])
-      .select()
-      .single();
-
-    if (profileError) {
-      return res.status(400).json({ error: profileError.message });
-    }
-
-    // 4. Issue a secure internal session token
-    const token = jwt.sign(
-      { id: newProfile.id, email: newProfile.email, role: newProfile.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      token,
-      user: {
-        id: newProfile.id,
-        name: newProfile.name,
-        email: newProfile.email,
-        role: newProfile.role,
-      },
+      message: 'User registered successfully into active system instances!',
+      user: data.user
     });
-  } catch (error) {
-    next(error);
+  } catch (err) {
+    next(err);
   }
 };
 
-// @POST /api/auth/login
+// 🔑 @POST /api/auth/login - Handles identity mapping and role extraction pipelines
 const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+      return res.status(400).json({ error: 'Missing active sign-in parameters.' });
     }
 
-    // 1. Authenticate the user credentials via Supabase Auth service
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (authError || !authData.user) {
-      return res.status(401).json({ error: 'Invalid email or password configurations.' });
+    if (error) {
+      return res.status(401).json({ error: 'Invalid authentication credentials provided.' });
     }
 
-    // 2. Fetch the custom profile details including the explicit 'role' string assignment
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, name, email, role')
-      .eq('id', authData.user.id)
-      .maybeSingle();
+    const user = data.user;
 
-    if (profileError || !profile) {
-      return res.status(404).json({ error: 'Nursery user profile record not found.' });
-    }
-
-    // 3. Generate our secure internal session token containing the active role payload
+    // Create a local session token to share profile identities with the client layout safely
     const token = jwt.sign(
-      { id: profile.id, email: profile.email, role: profile.role },
-      process.env.JWT_SECRET,
+      { 
+        id: user.id, 
+        email: user.email,
+        user_metadata: user.user_metadata 
+      },
+      jwtSecret,
       { expiresIn: '7d' }
     );
 
-    // 4. Return parameters back to the client app store instance
-    res.json({
+    return res.json({
       success: true,
       token,
       user: {
-        id: profile.id,
-        name: profile.name,
-        email: profile.email,
-        role: profile.role,
-      },
+        id: user.id,
+        email: user.email,
+        role: user.user_metadata?.role || 'buyer',
+        user_metadata: user.user_metadata
+      }
     });
-  } catch (error) {
-    next(error);
+  } catch (err) {
+    next(err);
   }
 };
 
-module.exports = { register, login };
+module.exports = {
+  register,
+  login
+};

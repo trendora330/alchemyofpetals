@@ -1,55 +1,62 @@
 'use client';
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import api from '../lib/api';
-import useStore from '../store/useStore';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const setSession = useStore((state) => state.setSession);
-  
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    phone: '',
-  });
+
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
     setLoading(true);
 
     try {
-      const res = await api.post('/auth/register', formData);
+      // 🚀 Sends the custom name, email, and password to the Express backend route
+      const res = await api.post('/auth/register', { name, email, password });
+      
       if (res.data.success) {
-        // Save user state globally and inside localStorage
-        setSession(res.data.user, res.data.token);
-        router.push('/'); // Redirect home upon success
+        setSuccess('Account registered successfully! Redirecting to login...');
+        setTimeout(() => {
+          router.push('/login');
+        }, 2000);
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Registration failed. Please try again.');
+      setError(err.response?.data?.error || 'Registration failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-cream flex items-center justify-center p-4">
-      <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 max-w-md w-full">
-        <h2 className="font-serif text-3xl font-bold text-forest-600 text-center mb-2">
+    <div className="min-h-screen bg-[#FEFAE0] flex items-center justify-center p-4">
+      <div className="bg-white p-8 rounded-2xl shadow-md border border-gray-200 max-w-md w-full">
+        <h2 className="font-serif text-3xl font-bold text-gray-900 text-center mb-2">
           Create an Account
         </h2>
         <p className="text-gray-500 text-sm text-center mb-6">
-          Join Alchemy of Petals to order beautiful flowering plants.
+          Join the nursery and start tracking your botanical selections.
         </p>
 
         {error && (
           <div className="bg-red-50 text-red-600 text-sm p-3 rounded-xl mb-4 font-medium border border-red-100">
             ⚠️ {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="bg-emerald-50 text-emerald-600 text-sm p-3 rounded-xl mb-4 font-medium border border-emerald-100">
+            🌿 {success}
           </div>
         )}
 
@@ -61,10 +68,10 @@ export default function RegisterPage() {
             <input
               type="text"
               required
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-forest-600 bg-gray-50"
-              placeholder="e.g., Devanarayanan Shijo"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-600 bg-gray-50 text-gray-900"
+              placeholder="Gowri"
             />
           </div>
 
@@ -73,25 +80,12 @@ export default function RegisterPage() {
               Email Address
             </label>
             <input
-              type="email"
+              type="type"
               required
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-forest-600 bg-gray-50"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-600 bg-gray-50 text-gray-900"
               placeholder="name@example.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
-              Phone Number (WhatsApp preferred)
-            </label>
-            <input
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-forest-600 bg-gray-50"
-              placeholder="e.g., +91987xxxxxxx"
             />
           </div>
 
@@ -102,28 +96,28 @@ export default function RegisterPage() {
             <input
               type="password"
               required
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-forest-600 bg-gray-50"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-600 bg-gray-50 text-gray-900"
               placeholder="••••••••"
             />
           </div>
 
           <button
-  type="submit"
-  disabled={loading}
-  className="w-full bg-[#2D6A4F] text-white hover:bg-[#1b4332] active:scale-[0.99] font-bold py-3.5 rounded-xl transition-all disabled:opacity-50 mt-2 shadow-sm flex items-center justify-center"
->
-  <span className="text-white font-bold">
-    {loading ? 'Creating Account...' : 'Sign Up 🌸'}
-  </span>
-</button>
+            type="submit"
+            disabled={loading}
+            className="w-full bg-[#2D6A4F] text-white hover:bg-[#1b4332] active:scale-[0.99] font-bold py-3.5 rounded-xl transition-all disabled:opacity-50 mt-2 shadow-sm flex items-center justify-center cursor-pointer"
+          >
+            <span className="text-white font-bold">
+              {loading ? 'Creating Account...' : 'Register 🌿'}
+            </span>
+          </button>
         </form>
 
         <p className="text-sm text-gray-500 text-center mt-6">
           Already have an account?{' '}
-          <Link href="/login" className="text-forest-600 font-semibold hover:underline">
-            Login here
+          <Link href="/login" className="text-green-700 font-semibold hover:underline">
+            Sign In here
           </Link>
         </p>
       </div>

@@ -18,17 +18,22 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
+    loading || setLoading(true);
 
     try {
       // 1. Submit email and password to the backend Express route
       const res = await api.post('/auth/login', { email, password });
       
       if (res.data.success) {
+        // Save the dynamic token to local browser memory explicitly so navigation checks intercept it correctly
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('token', res.data.token);
+        }
+
         // 2. Save the user data and token globally in the Zustand store
         setSession(res.data.user, res.data.token);
         
-        // 3. Immediately pull their cart rows so the navbar counts update
+        // 3. Immediately pull their cart rows so the navbar counts update with genuine registration data rows
         try {
           const cartRes = await api.get('/cart');
           setCart(cartRes.data.cartItems, cartRes.data.total);
@@ -36,8 +41,8 @@ export default function LoginPage() {
           console.error('Non-blocking error syncing user cart:', cartErr);
         }
 
-        // 4. Smart redirect based on role assignment
-        if (res.data.user?.role === 'admin') {
+        // 4. Smart redirect based on backend role configuration settings
+        if (res.data.user?.role === 'admin' || res.data.user?.user_metadata?.role === 'admin') {
           router.push('/admin');
         } else {
           router.push('/');
@@ -98,7 +103,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#2D6A4F] text-white hover:bg-[#1b4332] active:scale-[0.99] font-bold py-3.5 rounded-xl transition-all disabled:opacity-50 mt-2 shadow-sm flex items-center justify-center"
+            className="w-full bg-[#2D6A4F] text-white hover:bg-[#1b4332] active:scale-[0.99] font-bold py-3.5 rounded-xl transition-all disabled:opacity-50 mt-2 shadow-sm flex items-center justify-center cursor-pointer"
           >
             <span className="text-white font-bold">
               {loading ? 'Logging you in...' : 'Sign In 🌿'}
