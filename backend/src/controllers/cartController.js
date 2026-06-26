@@ -298,82 +298,61 @@ const getAdminDashboard = async (req, res, next) => {
   }
 };
 
-// 🪴 @POST /api/cart/admin/products - Bulletproof Fallback Multi-Column Injector
+// 🪴 @POST /api/cart/admin/products - Exact Schema Match Injection
 const adminAddProduct = async (req, res, next) => {
   try {
     const { name, title, price, image_url, imageUrl, description, stock } = req.body;
     const finalImageUrl = image_url || imageUrl || '';
 
-    const baseData = {
+    // 🔑 MATCHING YOUR EXACT DATABASE COLUMNS:
+    const productPayload = {
       name: name || title,
-      title: title || name,
+      slug: (name || title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
+      description: description || 'Healthy premium nursery botanical selection.',
       price: Number(price || 0),
-      description: description || 'Healthy premium nursery botanical item entry.',
-      stock: Number(stock || 10)
+      stock_quantity: Number(stock || 10), // 📦 Maps directly to your stock_quantity column
+      is_available: true,
+      // 📸 CONVERT STRING TO ARRAY: Wraps your image URL link into an array [url] so the schema accepts it!
+      images: finalImageUrl ? [finalImageUrl] : [] 
     };
 
-    // Attempt 1: Try inserting with snake_case 'image_url'
-    const payloadSnake = { ...baseData, image_url: finalImageUrl };
-    let { data, error } = await supabase.from('products').insert([payloadSnake]).select();
-
-    // Attempt 2: If cache rejects snake_case, fallback instantly to camelCase 'imageUrl'
-    if (error && (error.message.includes('image_url') || error.message.includes('schema cache'))) {
-      const payloadCamel = { ...baseData, imageUrl: finalImageUrl };
-      const fallbackResult = await supabase.from('products').insert([payloadCamel]).select();
-      data = fallbackResult.data;
-      error = fallbackResult.error;
-    }
-
-    // Attempt 3: If both explicitly named options are blocked, save using a plain 'image' column key alternative
-    if (error && (error.message.includes('imageUrl') || error.message.includes('schema cache'))) {
-      const payloadPlain = { ...baseData, image: finalImageUrl };
-      const plainResult = await supabase.from('products').insert([payloadPlain]).select();
-      data = plainResult.data;
-      error = plainResult.error;
-    }
+    const { data, error } = await supabase
+      .from('products')
+      .insert([productPayload])
+      .select();
 
     if (error) return res.status(400).json({ error: error.message });
     return res.status(201).json({ success: true, data });
   } catch (error) { next(error); }
 };
 
-// ✏️ @PUT /api/cart/admin/products/:id - Bulletproof Fallback Multi-Column Modifier
+// ✏️ @PUT /api/cart/admin/products/:id - Exact Schema Match Modifier
 const adminModifyProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name, price, image_url, imageUrl, description, stock } = req.body;
     const finalImageUrl = image_url || imageUrl || '';
 
-    const baseUpdate = {
+    // 🔑 MATCHING YOUR EXACT DATABASE COLUMNS:
+    const updatePayload = {
       name,
-      title: name,
+      slug: (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
       price: Number(price),
       description,
-      stock: Number(stock)
+      stock_quantity: Number(stock), // 📦 Maps directly to your stock_quantity column
+      images: finalImageUrl ? [finalImageUrl] : [] // 📸 Array wrapper match
     };
 
-    // Attempt 1: Update via snake_case
-    let { data, error } = await supabase.from('products').update({ ...baseUpdate, image_url: finalImageUrl }).eq('id', id).select();
-
-    // Attempt 2: Fallback to camelCase
-    if (error && (error.message.includes('image_url') || error.message.includes('schema cache'))) {
-      const fallbackResult = await supabase.from('products').update({ ...baseUpdate, imageUrl: finalImageUrl }).eq('id', id).select();
-      data = fallbackResult.data;
-      error = fallbackResult.error;
-    }
-
-    // Attempt 3: Fallback to plain image alternative
-    if (error && (error.message.includes('imageUrl') || error.message.includes('schema cache'))) {
-      const plainResult = await supabase.from('products').update({ ...baseUpdate, image: finalImageUrl }).eq('id', id).select();
-      data = plainResult.data;
-      error = plainResult.error;
-    }
+    const { data, error } = await supabase
+      .from('products')
+      .update(updatePayload)
+      .eq('id', id)
+      .select();
 
     if (error) return res.status(400).json({ error: error.message });
     return res.json({ success: true, data });
   } catch (error) { next(error); }
 };
-
 // 📸 @POST /api/cart/admin/upload - Uploads a binary file asset directly into the Supabase public bucket
 const uploadProductImage = async (req, res, next) => {
   try {
