@@ -3,8 +3,13 @@ const jwt = require('jsonwebtoken');
 
 // Initialize internal configuration states safely from process environment files
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
+
+// 🔑 FIX: Look for SUPABASE_KEY, fallback to SUPABASE_ANON_KEY so it matches your existing setup!
+const supabaseKey = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY; 
 const jwtSecret = process.env.JWT_SECRET || 'your-fallback-jwt-secret-string';
+if (!supabaseUrl || !supabaseKey) {
+  console.error("🚨 CRITICAL CONFIG ERROR: Missing SUPABASE_URL or SUPABASE_ANON_KEY environment variables!");
+}
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
