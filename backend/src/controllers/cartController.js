@@ -7,19 +7,33 @@ const razorpayClient = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET || ''
 });
 
-// @GET /api/cart - Retrieves all active items in a user's shopping basket safely
+// @GET /api/cart - Retrieves active shopping cart data paired with live user profile details
 const getCart = async (req, res, next) => {
   try {
     const userId = req.user.id;
+    // 🔑 GRAB USER IDENTITY METADATA: Pull the email or name directly from the authenticated request object
+    const userEmail = req.user.email || '';
+    let targetName = userEmail.split('@')[0]; // Fallback to email prefix (e.g., 'gowri' or 'deva')
+
+    // Optional: If you store full names inside the user metadata object, grab that instead
+    if (req.user.user_metadata && req.user.user_metadata.name) {
+      targetName = req.user.user_metadata.name;
+    } else if (req.user.user_metadata && req.user.user_metadata.full_name) {
+      targetName = req.user.user_metadata.full_name;
+    }
+
     const { data: rawCart, error: fetchError } = await supabase
       .from('cart')
       .select('*')
       .eq('user_id', userId);
 
     if (fetchError) return res.status(400).json({ error: fetchError.message });
-    if (!rawCart || rawCart.length === 0) return res.json({ success: true, cartItems: [], total: 0 });
+    
+    // If the cart is empty, still make sure to return the correct user's name!
+    if (!rawCart || rawCart.length === 0) {
+      return res.json({ success: true, cartItems: [], total: 0, userName: targetName });
+    }
 
-    const productIds = rawCart.map(item => item.product_id || item.productId);
     const { data: products } = await supabase.from('products').select('*');
 
     const cartItems = rawCart.map(item => {
@@ -43,7 +57,9 @@ const getCart = async (req, res, next) => {
     });
 
     const total = cartItems.reduce((sum, item) => sum + (Number(item.product?.price || 0) * Number(item.quantity)), 0);
-    return res.json({ success: true, cartItems, total });
+    
+    // 🚀 RETURN DYNAMIC USERNAME: Send the custom name right back to the frontend layout!
+    return res.json({ success: true, cartItems, total, userName: targetName });
   } catch (error) {
     next(error);
   }

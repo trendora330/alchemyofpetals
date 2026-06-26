@@ -36,7 +36,8 @@ export default function Navbar() {
 
       if (response.data.success) {
         setIsLoggedIn(true);
-        setUserName('Dev'); // Sets profile identity dynamically
+        // 🔄 FIXED: Reading dynamically from response payload rather than hardcoding 'Dev'
+        setUserName(response.data.userName || 'User'); 
         setCartTotal(response.data.total || 0);
         
         const items = response.data.cartItems || [];
