@@ -392,10 +392,25 @@ const uploadProductImage = async (req, res, next) => {
   }
 };
 
+const adminDeleteProduct = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id);
+
+    if (error) return res.status(400).json({ error: error.message });
+    return res.json({ success: true, message: 'Product successfully removed from catalog.' });
+  } catch (error) { next(error); }
+};
+
+
 // Append uploadProductImage into the exported modules block list context wrapper
 module.exports = { 
   getCart, addToCart, updateCartQuantity, removeFromCart, createPaymentOrder, saveOrder, getUserOrders,
-  getAdminDashboard, adminAddProduct, adminModifyProduct, uploadProductImage // 👈 Added here
+  getAdminDashboard, adminAddProduct, adminModifyProduct, uploadProductImage, adminDeleteProduct // 👈 Added here
 };
 
 // Append all three new handlers safely into your modules configuration wrapper setup block

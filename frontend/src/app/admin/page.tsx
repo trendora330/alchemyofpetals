@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Package, Plus, Edit2, Printer, DollarSign, ListOrdered, ClipboardList, CheckCircle2, Upload, Link as LinkIcon, Loader2 } from 'lucide-react';
+import { Package, Plus, Edit2, Trash2, Printer, DollarSign, ListOrdered, ClipboardList, CheckCircle2, Upload, Link as LinkIcon, Loader2 } from 'lucide-react';
 
 export default function AdminDashboard() {
   const [data, setData] = useState<any>(null);
@@ -38,14 +38,12 @@ export default function AdminDashboard() {
 
     setUploadingImage(true);
 
-    // 1. Create a dynamic image reader stream to draw on HTML canvas element configurations
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {
       const img = new Image();
       img.src = event.target?.result as string;
       img.onload = async () => {
-        // Enforce maximum web box constraints dimensions ratio rules
         const MAX_WIDTH = 800;
         const MAX_HEIGHT = 800;
         let width = img.width;
@@ -63,7 +61,6 @@ export default function AdminDashboard() {
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
 
-        // Convert the structural pixel layers matrix back into compressed low-weight binary files
         canvas.toBlob(async (blob) => {
           if (!blob) return;
           
@@ -90,7 +87,7 @@ export default function AdminDashboard() {
           } finally {
             setUploadingImage(false);
           }
-        }, 'image/jpeg', 0.82); // Compresses file down to an optimized 82% quality rating
+        }, 'image/jpeg', 0.82);
       };
     };
   };
@@ -122,6 +119,26 @@ export default function AdminDashboard() {
         await refreshDashboardState();
       }
     } catch (err) { console.error(err); }
+  };
+
+  // 🗑️ DELETION METHOD CHANNEL INTERSECTION 
+  const handleDeleteProduct = async (productId: string, productName: string) => {
+    if (!confirm(`Are you completely sure you want to delete "${productName}" from the store catalog? 🗑️`)) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.delete(`${API_URL}/api/cart/admin/products/${productId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.data.success) {
+        alert('🪴 Item successfully purged from active inventories!');
+        await refreshDashboardState();
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(`Failed to remove product: ${err.response?.data?.error || err.message}`);
+    }
   };
 
   const triggerStickyBillPrint = () => {
@@ -194,7 +211,6 @@ export default function AdminDashboard() {
                   <input type="number" placeholder="Stock Units" value={newPlant.stock} onChange={(e)=>setNewPlant({...newPlant, stock:e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#1E3A2F]" required />
                 </div>
 
-                {/* IMAGE ACQUISITION INTERACTION TOGGLE SELECTORS */}
                 <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50 space-y-3">
                   <div className="flex gap-4 border-b border-gray-100 pb-2 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
                     <button type="button" onClick={()=>setUploadMode('file')} className={`flex items-center gap-1 pb-1 border-b-2 cursor-pointer ${uploadMode === 'file' ? 'border-[#1E3A2F] text-[#1E3A2F]' : 'border-transparent'}`}><Upload className="w-3 h-3"/> Device Upload</button>
@@ -240,12 +256,12 @@ export default function AdminDashboard() {
                 <form onSubmit={handleUpdateProductSubmit} className="space-y-3 text-sm">
                   <input type="text" value={editingPlant.name} onChange={(e)=>setEditingPlant({...editingPlant, name:e.target.value})} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs" required />
                   <div className="grid grid-cols-2 gap-3">
-  <input type="number" value={editingPlant.price} onChange={(e)=>setEditingPlant({...editingPlant, price:e.target.value})} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs" required />
-  {/* 🔄 FIXED: Changed from editingPlant.stock to editingPlant.stock_quantity */}
-  <input type="number" value={editingPlant.stock_quantity || editingPlant.stock} onChange={(e)=>setEditingPlant({...editingPlant, stock_quantity:e.target.value})} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs" required />
-</div>
-{/* 🔄 FIXED: Updates image_url handling from arrays safely */}
-<input type="text" value={(editingPlant.images && editingPlant.images[0]) || editingPlant.image_url || ''} onChange={(e)=>setEditingPlant({...editingPlant, images: [e.target.value]})} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs" />
+                    <input type="number" value={editingPlant.price} onChange={(e)=>setEditingPlant({...editingPlant, price:e.target.value})} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs" required />
+                    {/* 🔄 FIXED: Maps editing values directly onto stock_quantity rules */}
+                    <input type="number" value={editingPlant.stock_quantity || editingPlant.stock} onChange={(e)=>setEditingPlant({...editingPlant, stock_quantity:e.target.value})} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs" required />
+                  </div>
+                  {/* 🔄 FIXED: Maps single input back to update array items arrays */}
+                  <input type="text" value={(editingPlant.images && editingPlant.images[0]) || editingPlant.image_url || ''} onChange={(e)=>setEditingPlant({...editingPlant, images: [e.target.value]})} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs" />
                   <div className="flex gap-2">
                     <button type="submit" className="flex-1 bg-[#1E3A2F] text-white py-2 rounded-xl text-xs font-bold cursor-pointer">Update Plant</button>
                     <button type="button" onClick={()=>setEditingPlant(null)} className="bg-gray-200 text-gray-700 py-2 px-4 rounded-xl text-xs font-bold cursor-pointer">Cancel</button>
@@ -258,28 +274,43 @@ export default function AdminDashboard() {
               <h2 className="text-md font-bold text-[#1E3A2F]">Live Plant Catalog Grid ({data?.products?.length})</h2>
               <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
                 {data?.products?.map((prod: any) => (
-                  <div className="flex items-center justify-between border-b border-gray-50 pb-3 last:border-none last:pb-0">
-  <div className="flex items-center gap-3">
-    
-    {/* 📸 CHOOSE THIS ENTIRE IMAGE DIV CONTAINER BLOCK TO REPLACE */}
-    <div className="w-10 h-10 bg-gray-50 border border-gray-100 rounded-lg overflow-hidden flex items-center justify-center text-xs">
-      {prod.images && prod.images.length > 0 ? (
-        <img src={prod.images[0]} className="w-full h-full object-cover" alt="plant photo" />
-      ) : prod.image_url || prod.imageUrl ? (
-        <img src={prod.image_url || prod.imageUrl} className="w-full h-full object-cover" alt="plant photo" />
-      ) : (
-        '🪴'
-      )}
-    </div>
+                  <div key={prod.id} className="flex items-center justify-between border-b border-gray-50 pb-3 last:border-none last:pb-0">
+                    <div className="flex items-center gap-3">
+                      {/* 📸 FIXED: Uses native PostgreSQL Array matching at index 0 */}
+                      <div className="w-10 h-10 bg-gray-50 border border-gray-100 rounded-lg overflow-hidden flex items-center justify-center text-xs">
+                        {prod.images && prod.images.length > 0 ? (
+                          <img src={prod.images[0]} className="w-full h-full object-cover" alt="plant photo" />
+                        ) : prod.image_url || prod.imageUrl ? (
+                          <img src={prod.image_url || prod.imageUrl} className="w-full h-full object-cover" alt="plant photo" />
+                        ) : (
+                          '🪴'
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-gray-800">{prod.name || prod.title}</p>
+                        {/* 🔄 FIXED: Points directly to stock_quantity */}
+                        <p className="text-[11px] text-gray-400">Price: ₹{prod.price} | Stock: <span className="font-bold text-gray-600">{prod.stock_quantity ?? 10} units</span></p>
+                      </div>
+                    </div>
+                    
+                    {/* Action buttons wrapper container layout */}
+                    <div className="flex gap-1.5">
+                      <button type="button" onClick={()=>setEditingPlant(prod)} className="p-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-gray-500 hover:text-[#1E3A2F] transition-colors cursor-pointer">
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
 
-    <div>
-      <p className="text-xs font-bold text-gray-800">{prod.name || prod.title}</p>
-      {/* 🔄 FIXED: Changed from prod.stock to prod.stock_quantity */}
-      <p className="text-[11px] text-gray-400">Price: ₹{prod.price} | Stock: <span className="font-bold text-gray-600">{prod.stock_quantity ?? 10} units</span></p>
-    </div>
-  </div>
-  <button type="button" onClick={()=>setEditingPlant(prod)} className="p-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-gray-500 hover:text-[#1E3A2F] transition-colors cursor-pointer"><Edit2 className="w-3.5 h-3.5" /></button>
-</div>
+                      {/* 🗑️ TRASH ACTION HOOK DELETION INTERACTION SELECTION */}
+                      <button 
+                        type="button" 
+                        onClick={() => handleDeleteProduct(prod.id, prod.name || prod.title)} 
+                        className="p-1.5 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-red-500 transition-colors cursor-pointer"
+                        title="Delete Item"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                  </div>
                 ))}
               </div>
             </div>
@@ -290,7 +321,7 @@ export default function AdminDashboard() {
             <h2 className="text-lg font-bold text-[#1E3A2F] flex items-center gap-1.5"><CheckCircle2 className="w-5 h-5 text-emerald-600" /> Dynamic Order Dispatch Feed Tracker</h2>
             
             <div className="space-y-4 max-h-[640px] overflow-y-auto pr-1">
-              {data?.orders?.length === 0 ? (
+              {!data?.orders || data.orders.length === 0 ? (
                 <p className="text-xs text-center py-12 text-gray-400 font-medium">No live completed customer check-outs recorded in backend data rows yet.</p>
               ) : (
                 data?.orders?.map((order: any) => (

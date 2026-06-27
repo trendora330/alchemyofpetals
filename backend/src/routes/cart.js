@@ -25,6 +25,7 @@ router.get('/history', protect, getUserOrders);
 router.get('/admin/dashboard', protect, getAdminDashboard);
 router.post('/admin/products', protect, adminAddProduct);
 router.put('/admin/products/:id', protect, adminModifyProduct);
+router.delete('/admin/products/:id', protect, adminDeleteProduct); // Added delete route for admin
 
 // 📸 New Image Upload Pipeline Route Hook
 router.post('/admin/upload', protect, upload.single('image'), uploadProductImage); 
