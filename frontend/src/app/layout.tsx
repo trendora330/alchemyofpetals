@@ -4,7 +4,7 @@ import './globals.css';
 import Navbar from '@/components/Navbar';
 import api from './lib/api';
 import useStore from './store/useStore';
-
+import Toast from '@/components/Toast';
 export default function RootLayout({
   children,
 }: {
@@ -57,6 +57,7 @@ export default function RootLayout({
             </div>
           </div>
         )}
+        <Toast />
       </body>
     </html>
   );

@@ -12,12 +12,13 @@ interface Product {
   original_price: number;
   difficulty: string;
   tags: string[];
-  images?: string[]; // 🔑 Added images array definition to TypeScript interface
+  images?: string[];
 }
 
 export default function ProductCard({ product }: { product: Product }) {
   const token = useStore((state) => state.token);
   const setCart = useStore((state) => state.setCart);
+  const showToast = useStore((state) => state.showToast); // 👈 Pull toast trigger action
   const [adding, setAdding] = useState(false);
 
   const discount = product.original_price
@@ -26,7 +27,8 @@ export default function ProductCard({ product }: { product: Product }) {
 
   const handleAddToCart = async () => {
     if (!token) {
-      alert('Please log in or register an account to add items to your cart! 🌿');
+      // 🔄 CHANGED: Chrome old popup replaced with custom error toast
+      showToast('Please sign in or register to add premium varieties to your basket! 🌿', 'error');
       return;
     }
 
@@ -35,13 +37,17 @@ export default function ProductCard({ product }: { product: Product }) {
       await api.post('/cart', { product_id: product.id, quantity: 1 });
       const cartRes = await api.get('/cart');
       setCart(cartRes.data.cartItems, cartRes.data.total);
-      alert(`Successfully added ${product.name} to your basket! 🌸`);
+      
+      // 🔄 CHANGED: Replaced native alert with beautiful emerald success card
+      showToast(`Added ${product.name} to your basket! 🌸`, 'success');
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Could not add item to basket.');
+      showToast(err.response?.data?.error || 'Could not append selected items.', 'error');
     } finally {
       setAdding(false);
     }
   };
+
+  // ... keep your identical return UI elements down below!
 
   return (
     <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden border border-gray-200 flex flex-col justify-between group">

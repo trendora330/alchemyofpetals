@@ -19,40 +19,43 @@ interface CartItem {
   product?: any;
 }
 
+// 🍞 Toast structure mapping parameters
+interface ToastConfig {
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
+
 interface StoreState {
   user: UserProfile | null;
   token: string | null;
   cartItems: CartItem[];
   cartTotal: number;
+  toast: ToastConfig | null; // 👈 Track active toast state
   setSession: (user: UserProfile | null, token: string | null) => void;
   setCart: (items: CartItem[], total: number) => void;
+  showToast: (message: string, type?: 'success' | 'error' | 'info') => void; // 👈 Trigger toast
+  clearToast: () => void;
   clearSession: () => void;
 }
 
 const useStore = create<StoreState>((set) => {
-  // Safely grab initial values from browser local storage to prevent state flashes
   const initialToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   const initialUserRaw = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   
   let initialUser: UserProfile | null = null;
   try {
-    if (initialUserRaw) {
-      initialUser = JSON.parse(initialUserRaw);
-    }
+    if (initialUserRaw) initialUser = JSON.parse(initialUserRaw);
   } catch (e) {
-    console.error("Failed parsing initial session user details metadata:", e);
+    console.error("Failed parsing initial session user details:", e);
   }
 
   return {
-    // Session State Layers
     user: initialUser,
     token: initialToken,
-    
-    // Cart Metric Storage Containers
     cartItems: [],
     cartTotal: 0,
+    toast: null, // Initial state holds no active alert blocks
 
-    // 🔄 Update Session Setter to prevent hardcoded identity overrides
     setSession: (user, token) => {
       if (typeof window !== 'undefined') {
         if (token) localStorage.setItem('token', token);
@@ -62,29 +65,32 @@ const useStore = create<StoreState>((set) => {
         else localStorage.removeItem('user');
       }
 
-      // Process user object mapping to assign names gracefully
       const processedUser = user ? {
         ...user,
-        // 🔑 THE FIX: Dynamic lookup cascade across registration fields
         name: user.user_metadata?.name || user.user_metadata?.full_name || user.name || user.email?.split('@')[0] || 'User'
       } : null;
 
       set({ user: processedUser, token });
     },
 
-    // Update global cart matrices concurrently
     setCart: (items, total) => set({ 
       cartItems: items || [], 
       cartTotal: Number(total) || 0 
     }),
 
-    // Wipes out memory state caches upon triggering store logout loops
+    // ✨ NEW: Globally orchestrate custom alert dismissals
+    showToast: (message, type = 'success') => {
+      set({ toast: { message, type } });
+    },
+
+    clearToast: () => set({ toast: null }),
+
     clearSession: () => {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
       }
-      set({ user: null, token: null, cartItems: [], cartTotal: 0 });
+      set({ user: null, token: null, cartItems: [], cartTotal: 0, toast: null });
     }
   };
 });
