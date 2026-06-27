@@ -62,18 +62,18 @@ export default function RegisterPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
-              Full Name
-            </label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-600 bg-gray-50 text-gray-900"
-              placeholder="Gowri"
-            />
-          </div>
+  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+    Full Name
+  </label>
+  <input
+    type="text"
+    required
+    value={name} // 👈 1. Must be bound to your state name variable
+    onChange={(e) => setName(e.target.value)} // 👈 2. Must update the state on keystroke
+    className="w-full border border-gray-200 rounded-xl px-4 py-3 bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-600"
+    placeholder="Deepthi"
+  />
+</div>
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
