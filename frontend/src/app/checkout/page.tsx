@@ -1,16 +1,16 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import Script from 'next/script';
-import { Minus, Plus, Trash2, ShoppingBag, Truck, CreditCard } from 'lucide-react';
-import useStore from '../store/useStore';
-import api from '../lib/api';
+import { useRouter } from 'next/navigation';
+import { ShoppingBag, CreditCard, MapPin, User, Phone, Leaf, ArrowRight, Loader2 } from 'lucide-react';
+import api from '../lib/api'; // 🔑 FIXED: Brought in missing api instance
+import useStore from '../store/useStore'; // 🔑 FIXED: Hooks up global toast context state arrays
 
-interface ProductDetails {
+interface Product {
   id: string;
   name: string;
   price: number;
+  images?: string[];
   image_url?: string;
   imageUrl?: string;
 }
@@ -18,296 +18,264 @@ interface ProductDetails {
 interface CartItem {
   id: string;
   product_id: string;
-  productId: string;
   quantity: number;
-  product?: ProductDetails;
-  products?: ProductDetails;
+  product?: Product;
 }
 
 export default function CheckoutPage() {
+  const router = useRouter();
+  
+  // Zustand Global Store hooks
+  const token = useStore((state) => state.token);
+  const setCart = useStore((state) => state.setCart);
+  const showToast = useStore((state) => state.showToast); // 🔑 FIXED: Pulled toast trigger
+
+  // Local Page Component State Variables
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [total, setTotal] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [isProcessingPayment, setIsProcessingPayment] = useState<boolean>(false);
-  const showToast = useStore((state) => state.showToast); 
-  const setCart = useStore((state) => state.setCart);
+
+  // Delivery Form State Channels
   const [shippingDetails, setShippingDetails] = useState({
-    name: '',
-    phone: '',
-    address: '',
+    recipientName: '',
+    phoneNumber: '',
+    deliveryAddress: '',
     city: '',
     pincode: ''
   });
 
-  const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://alchemy-backend-kmjb.onrender.com';
-  const API_URL = BASE_URL.endsWith('/api') ? BASE_URL.slice(0, -4) : BASE_URL;
-
-  const fetchCart = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      const response = await axios.get(`${API_URL}/api/cart`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (response.data.success) {
-        setCartItems(response.data.cartItems || []);
-        setTotal(response.data.total || 0);
-      }
-    } catch (err) {
-      console.error('Error fetching cart:', err);
-    } finally {
-      setLoading(false);
+  // Pull active cart data on load
+  useEffect(() => {
+    if (!token) {
+      router.push('/login');
+      return;
     }
-  };
 
-  useEffect(() => { fetchCart(); }, []);
+    api.get('/cart')
+      .then((res) => {
+        if (res.data.success) {
+          setCartItems(res.data.cartItems || []);
+          setTotal(res.data.total || 0);
+        }
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Error syncing backend checkout layers:', err);
+        showToast('Could not load your plant selections.', 'error');
+        setLoading(false);
+      });
+  }, [token, router]);
 
-  const updateQuantity = async (productId: string, currentQty: number, delta: number, actionType?: string) => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      const response = await axios.post(`${API_URL}/api/cart`, { productId, quantity: delta, action: actionType }, { headers: { Authorization: `Bearer ${token}` } });
-      if (response.data.success) await fetchCart();
-    } catch (err) { console.error(err); }
-  };
-
-  const removeItemCompletely = async (cartItemId: string) => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      const response = await axios.delete(`${API_URL}/api/cart/${cartItemId}`, { headers: { Authorization: `Bearer ${token}` } });
-      if (response.data.success) await fetchCart();
-    } catch (err) { console.error(err); }
-  };
-
-  const handleRazorpayPayment = async () => {
-    if (total <= 0 || cartItems.length === 0) return;
-    if (!shippingDetails.name || !shippingDetails.phone || !shippingDetails.address) {
-      alert('Please fill in your name, contact phone, and delivery address first!');
+  // Razorpay Transaction Gate Pipeline Insertion Routine
+  const handleCheckoutPaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (cartItems.length === 0) {
+      showToast('Your checkout basket is empty! 🪴', 'info');
       return;
     }
 
     setIsProcessingPayment(true);
 
     try {
-      const token = localStorage.getItem('token');
-      
-      const orderResponse = await axios.post(
-        `${API_URL}/api/cart/create-order`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      // 1. Initialize custom payment order receipt sequence on Node Express backend
+      const orderInitRes = await api.post('/cart/checkout', {
+        amount: total,
+        recipient_name: shippingDetails.recipientName,
+        phone_number: shippingDetails.phoneNumber,
+        delivery_address: shippingDetails.deliveryAddress,
+        city: shippingDetails.city,
+        pincode: shippingDetails.pincode
+      });
 
-      if (!orderResponse.data.success) {
-        throw new Error('Could not initialize secure checkout authorization block.');
+      if (!orderInitRes.data.success) {
+        throw new Error(orderInitRes.data.error || 'Order registration initialization failed.');
       }
 
-      const { order_id, amount, currency, server_total } = orderResponse.data;
+      const { orderId, amount, currency, razorpayKeyId } = orderInitRes.data;
 
-      const paymentOptions = {
-        // 🔑 HARDCODED FIX: Put your rzp_test_... key right here so it works 100% of the time!
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_T58hnFfDYthPem',
-        amount: amount, 
+      // 2. Open standard window parameters options for the Razorpay Checkout SDK layout
+      const options = {
+        key: razorpayKeyId,
+        amount: amount,
         currency: currency,
         name: 'Alchemy of Petals',
-        description: 'Nursery Plant Order Checklist',
-        order_id: order_id,
-        image: 'https://alchemyofpetals-cyan.vercel.app/favicon.ico',
+        description: 'Premium Botanical Garden Varieties',
+        image: 'https://alchemy-of-petals-cyan.vercel.app/favicon.ico',
+        order_id: orderId,
+        
+        // 🔒 SUCCESS TRANSACTION INTERACTION CHECKPOINT HOOK
         handler: async function (response: any) {
           try {
-            const confirmationResponse = await axios.post(
-              `${API_URL}/api/cart/confirm-order`,
-              {
-                payment_id: response.razorpay_payment_id,
-                order_id: order_id,
-                amount: server_total || total,
-                shippingDetails,
-                items: cartItems
-              },
-              { headers: { Authorization: `Bearer ${token}` } }
-            );
+            // Confirm the incoming checkout sequence blocks signatures natively on our Node/Express server
+            const saveOrderRes = await api.post('/cart/save-order', {
+              order_id: orderId,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_signature: response.razorpay_signature,
+              recipient_name: shippingDetails.recipientName,
+              phone_number: shippingDetails.phoneNumber,
+              delivery_address: shippingDetails.deliveryAddress,
+              city: shippingDetails.city,
+              pincode: shippingDetails.pincode,
+              amount: total / 100, // Matching baseline database units
+              items: cartItems
+            });
 
-            if (confirmationResponse.data.success) {
-              alert(`🎉 Order Placed and Archived Successfully!\nPayment ID: ${response.razorpay_payment_id}`);
-              setCartItems([]);
-              setTotal(0);
+            if (saveOrderRes.data.success) {
+              // 🔄 FIXED: Dropped the old generic popup alert window for our gorgeous custom UI toast banner!
+              showToast(`🎉 Order Placed and Archived Successfully! Payment ID: ${response.razorpay_payment_id}`, 'success');
+              
+              // Clear Zustand state caches 
+              setCart([], 0);
+              
+              // Send the buyer home safely
+              router.push('/');
+            } else {
+              throw new Error(saveOrderRes.data.error || 'Failed to archive payment receipt rows.');
             }
-          } catch (confirmError) {
-            console.error('Failed to preserve order tracking reference state:', confirmError);
-            alert('Payment captured by bank, but backend database save failed.');
+          } catch (verifyErr: any) {
+            console.error(verifyErr);
+            showToast(verifyErr.response?.data?.error || verifyErr.message || 'Payment validation failed.', 'error');
           }
         },
         prefill: {
-          name: shippingDetails.name,
-          contact: shippingDetails.phone,
-          email: 'customer@alchemyofpetals.com'
+          name: shippingDetails.recipientName,
+          contact: shippingDetails.phoneNumber
         },
-        theme: { color: '#1E3A2F' }
+        theme: {
+          color: '#2D6A4F'
+        },
+        modal: {
+          ondismiss: function () {
+            setIsProcessingPayment(false);
+          }
+        }
       };
 
-      const rzpWindow = window as any;
-      if (rzpWindow.Razorpay) {
-        const razorpayModalInstance = new rzpWindow.Razorpay(paymentOptions);
-        razorpayModalInstance.open();
-      } else {
-        alert('Razorpay runtime package not accessible.');
-      }
-    } catch (paymentError: any) {
-      console.error('Payment failure trace:', paymentError);
-      alert(paymentError.response?.data?.error || 'Transaction validation mismatch encountered.');
-    } finally {
-      setIsProcessingPayment(false);
-    }
-  };
-  const handlePlaceOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsProcessingPayment(true);
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
 
-    try {
-      // Your existing payment processing code block execution channels...
-      const res = await api.post('/orders/verify', { /* payment data */ });
-
-      if (res.data.success) {
-        // 🔄 REPLACED: Old alert replaced with smooth custom green toast banner!
-        showToast('🎉 Order confirmed! Your plants are being packaged for shipment.', 'success');
-        
-        // Wipe local cart parameters out safely
-        setCart([], 0); 
-        
-        // Router push or redirect steps...
-      }
     } catch (err: any) {
-      console.error(err);
-      // 🔄 REPLACED: Old error popup replaced with premium red custom error alert card
-      showToast(err.response?.data?.error || 'Transaction processing failed. Please try again.', 'error');
-    } finally {
+      console.error('Checkout validation workflow dropped error chains:', err);
+      showToast(err.response?.data?.error || err.message || 'Could not instantiate transaction checkout gates.', 'error');
       setIsProcessingPayment(false);
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center">
-        <p className="text-gray-500 font-medium">Loading your green basket components...</p>
+      <div className="min-h-screen bg-[#FEFAE0] flex flex-col items-center justify-center text-sm font-bold text-gray-500 gap-2">
+        <Loader2 className="w-6 h-6 text-green-700 animate-spin" />
+        Synchronizing shipping and active inventory structures...
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#FDFBF7] py-12 px-4 sm:px-6 lg:px-8 font-sans text-gray-900">
-      <Script id="razorpay-checkout-sdk" src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
-
-      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+    <div className="min-h-screen bg-[#FEFAE0] text-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-8">
         
-        {/* Left Column */}
-        <div className="lg:col-span-7 space-y-6">
-          <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
-            <h2 className="text-xl font-bold text-[#1E3A2F] flex items-center gap-2 mb-6">
-              <ShoppingBag className="w-5 h-5" /> Your Plant Selection
-            </h2>
+        {/* Left Side: Delivery Details Form Input */}
+        <div className="md:col-span-7 bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-6">
+          <h2 className="font-serif text-xl font-bold text-gray-900 flex items-center gap-2 pb-3 border-b border-gray-100">
+            <MapPin className="text-[#2D6A4F] w-5 h-5" /> Shipping Details
+          </h2>
 
-            {cartItems.length === 0 ? (
-              <p className="text-gray-400 text-center py-8">Your plant basket is empty.</p>
-            ) : (
-              <div className="space-y-4">
-                {cartItems.map((item) => {
-                  const product = item.product || item.products;
-                  if (!product) return null;
-
-                  return (
-                    <div key={item.id} className="flex items-center justify-between border-b border-gray-50 pb-4 last:border-0 last:pb-0">
-                      <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 bg-gray-50 rounded-xl overflow-hidden flex items-center justify-center text-xs text-gray-400">
-                          {product.image_url ? (
-                            <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
-                          ) : ( '🪴' )}
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-gray-800">{product.name}</h3>
-                          <p className="text-sm text-gray-400">₹{product.price} each</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center bg-gray-50 border border-gray-100 rounded-lg p-1 gap-2">
-                          <button type="button" onClick={() => updateQuantity(product.id, item.quantity, -1, 'decrease')} className="p-1 hover:bg-white rounded transition-colors text-gray-600 shadow-none">
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <span className="text-sm font-bold text-gray-700 px-1 w-4 text-center">{item.quantity}</span>
-                          <button type="button" onClick={() => updateQuantity(product.id, item.quantity, 1, 'increase')} className="p-1 hover:bg-white rounded transition-colors text-gray-600 shadow-none">
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        <span className="font-semibold text-gray-800 min-w-[3.5rem] text-right">₹{product.price * item.quantity}</span>
-                        <button type="button" onClick={() => removeItemCompletely(item.id)} className="text-gray-300 hover:text-red-500 transition-colors p-1">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+          <form onSubmit={handleCheckoutPaymentSubmit} className="space-y-4 text-xs font-semibold uppercase tracking-wider text-gray-500">
+            <div>
+              <label className="block mb-1">Recipient Name</label>
+              <div className="relative">
+                <User className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                <input type="text" required value={shippingDetails.recipientName} onChange={(e) => setShippingDetails({ ...shippingDetails, recipientName: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm font-normal text-gray-900 lowercase first-letter:uppercase focus:outline-none focus:ring-2 focus:ring-green-600" placeholder="Devanarayanan" />
               </div>
-            )}
-          </div>
+            </div>
 
-          <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
-            <h2 className="text-xl font-bold text-[#1E3A2F] mb-6">Shipping Details</h2>
-            <form className="space-y-4">
+            <div>
+              <label className="block mb-1">Phone Number</label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                <input type="tel" required pattern="[0-9]{10}" value={shippingDetails.phoneNumber} onChange={(e) => setShippingDetails({ ...shippingDetails, phoneNumber: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm font-normal text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-600" placeholder="9074123456" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block mb-1">Nursery Delivery Address</label>
+              <textarea required rows={3} value={shippingDetails.deliveryAddress} onChange={(e) => setShippingDetails({ ...shippingDetails, deliveryAddress: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-normal text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-600 resize-none" placeholder="House Name, Street Layout Details..." />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Recipient Name</label>
-                <input type="text" value={shippingDetails.name} onChange={(e) => setShippingDetails({...shippingDetails, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#1E3A2F] transition-colors" placeholder="Recipient Name" />
+                <label className="block mb-1">City</label>
+                <input type="text" required value={shippingDetails.city} onChange={(e) => setShippingDetails({ ...shippingDetails, city: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-normal text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-600" placeholder="Amaravati" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Phone Number</label>
-                <input type="text" value={shippingDetails.phone} onChange={(e) => setShippingDetails({...shippingDetails, phone: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#1E3A2F] transition-colors" placeholder="10-digit mobile number" />
+                <label className="block mb-1">Pincode</label>
+                <input type="text" required pattern="[0-9]{6}" value={shippingDetails.pincode} onChange={(e) => setShippingDetails({ ...shippingDetails, pincode: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-normal text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-600" placeholder="522501" />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Nursery Delivery Address</label>
-                <textarea rows={3} value={shippingDetails.address} onChange={(e) => setShippingDetails({...shippingDetails, address: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#1E3A2F] transition-colors resize-none" placeholder="House No, Street name, Area, LandMark" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">City</label>
-                  <input type="text" value={shippingDetails.city} onChange={(e) => setShippingDetails({...shippingDetails, city: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#1E3A2F] transition-colors" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Pincode</label>
-                  <input type="text" value={shippingDetails.pincode} onChange={(e) => setShippingDetails({...shippingDetails, pincode: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#1E3A2F] transition-colors" placeholder="PIN" />
-                </div>
-              </div>
-            </form>
-          </div>
+            </div>
+
+            <button type="submit" disabled={isProcessingPayment} className="w-full mt-4 bg-[#2D6A4F] text-white hover:bg-[#1b4332] active:scale-[0.99] font-bold py-4 rounded-xl text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-sm">
+              {isProcessingPayment ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span className="text-white">Connecting Razorpay Systems...</span>
+                </>
+              ) : (
+                <>
+                  <CreditCard className="w-4 h-4 text-white" />
+                  <span className="text-white">Pay ₹{total} with Razorpay</span>
+                  <ArrowRight className="w-4 h-4 text-white" />
+                </>
+              )}
+            </button>
+          </form>
         </div>
 
-        {/* Right Column */}
-        <div className="lg:col-span-5">
-          <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm sticky top-6 space-y-6">
-            <h2 className="text-xl font-bold text-[#1E3A2F]">Summary</h2>
-            <div className="space-y-3 text-sm border-b border-gray-100 pb-4">
-              <div className="flex justify-between text-gray-500">
-                <span>Plant Basket Subtotal</span>
-                <span className="font-semibold text-gray-800">₹{total}</span>
-              </div>
-              <div className="flex justify-between text-gray-500">
-                <span>Delivery Logistics</span>
-                <span className="font-bold text-green-600 flex items-center gap-1"><Truck className="w-4 h-4" /> FREE</span>
-              </div>
+        {/* Right Side: Plant Selection Inventory Breakdown Summary */}
+        <div className="md:col-span-5 space-y-6">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+            <h2 className="font-serif text-xl font-bold text-gray-900 flex items-center gap-2 pb-3 border-b border-gray-100 mb-4">
+              <ShoppingBag className="text-[#2D6A4F] w-5 h-5" /> Your Plant Selection
+            </h2>
+
+            <div className="space-y-4 max-h-[280px] overflow-y-auto pr-1">
+              {cartItems.map((item) => {
+                const imgSource = item.product?.images && item.product.images.length > 0 
+                  ? item.product.images[0] 
+                  : (item.product?.image_url || item.product?.imageUrl || '/placeholder-plant.jpg');
+
+                return (
+                  <div key={item.id} className="flex items-center justify-between gap-3 border-b border-gray-50 pb-3 last:border-none last:pb-0">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-gray-50 border border-gray-100 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0">
+                        <img src={imgSource} className="w-full h-full object-cover" alt="item photo" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-900 line-clamp-1">{item.product?.name}</p>
+                        <p className="text-xs text-gray-400 font-medium">Quantity: <span className="font-bold text-gray-600">×{item.quantity}</span></p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-bold text-gray-800">₹{(item.product?.price || 0) * item.quantity}</span>
+                  </div>
+                );
+              })}
             </div>
 
-            <div className="flex justify-between items-center">
-              <span className="text-lg font-bold text-[#1E3A2F]">Grand Total:</span>
-              <span className="text-2xl font-black text-[#1E3A2F]">₹{total}</span>
+            <div className="border-t border-gray-100 mt-5 pt-4 space-y-2 text-sm">
+              <div className="flex justify-between text-gray-500 font-medium">
+                <span>Subtotal</span>
+                <span>₹{total}</span>
+              </div>
+              <div className="flex justify-between text-gray-500 font-medium">
+                <span>Logistics Delivery</span>
+                <span className="text-emerald-600 font-bold flex items-center gap-0.5"><Leaf className="w-3.5 h-3.5"/> FREE</span>
+              </div>
+              <div className="border-t border-gray-200 pt-3 flex justify-between text-lg font-black text-gray-900">
+                <span>Grand Total:</span>
+                <span>₹{total}</span>
+              </div>
             </div>
-
-            <button 
-              type="button"
-              disabled={cartItems.length === 0 || isProcessingPayment}
-              onClick={handleRazorpayPayment}
-              className="w-full bg-[#1E3A2F] hover:bg-[#152921] disabled:bg-gray-200 text-white font-semibold py-4 rounded-xl transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <CreditCard className="w-4 h-4" /> 
-              {isProcessingPayment ? 'Securing Order token...' : `Pay ₹${total} with Razorpay`}
-            </button>
           </div>
         </div>
 
