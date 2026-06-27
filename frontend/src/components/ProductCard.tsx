@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { ShoppingCart, Leaf } from 'lucide-react';
+import { ShoppingCart } from 'lucide-react';
 import api from '../app/lib/api';
 import useStore from '../app/store/useStore';
 
@@ -12,6 +12,7 @@ interface Product {
   original_price: number;
   difficulty: string;
   tags: string[];
+  images?: string[]; // 🔑 Added images array definition to TypeScript interface
 }
 
 export default function ProductCard({ product }: { product: Product }) {
@@ -43,13 +44,24 @@ export default function ProductCard({ product }: { product: Product }) {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden border border-gray-200 flex flex-col justify-between">
+    <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden border border-gray-200 flex flex-col justify-between group">
       <div className="p-4">
+        
         {/* Visual Container Box */}
-        <div className="aspect-square bg-gray-100 rounded-xl mb-4 flex items-center justify-center text-[#2D6A4F] relative border border-gray-200">
-          <Leaf className="w-12 h-12 stroke-[1.5]" />
+        <div className="aspect-square bg-gray-100 rounded-xl mb-4 flex items-center justify-center relative border border-gray-200 overflow-hidden">
+          {/* 📸 DYNAMIC ARRAY IMAGE RENDERER */}
+          {product.images && product.images.length > 0 ? (
+            <img 
+              src={product.images[0]} 
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+              alt={product.name} 
+            />
+          ) : (
+            <div className="text-gray-400 text-xs font-semibold">🪴 No Photo Available</div>
+          )}
+
           {discount > 0 && (
-            <span className="absolute top-2 left-2 bg-[#C9184A] text-white text-xs font-bold px-2 py-1 rounded-full">
+            <span className="absolute top-2 left-2 bg-[#C9184A] text-white text-xs font-bold px-2 py-1 rounded-full z-10">
               {discount}% OFF
             </span>
           )}
@@ -83,7 +95,7 @@ export default function ProductCard({ product }: { product: Product }) {
         <button 
           onClick={handleAddToCart}
           disabled={adding}
-          className="w-full bg-[#2D6A4F] text-white hover:bg-[#1b4332] active:scale-[0.98] py-3 rounded-xl transition-all flex items-center justify-center gap-2 font-bold text-sm disabled:opacity-60 shadow-sm"
+          className="w-full bg-[#2D6A4F] text-white hover:bg-[#1b4332] active:scale-[0.98] py-3 rounded-xl transition-all flex items-center justify-center gap-2 font-bold text-sm disabled:opacity-60 shadow-sm cursor-pointer"
         >
           <ShoppingCart className="w-4 h-4 text-white" />
           <span className="text-white">

@@ -240,10 +240,12 @@ export default function AdminDashboard() {
                 <form onSubmit={handleUpdateProductSubmit} className="space-y-3 text-sm">
                   <input type="text" value={editingPlant.name} onChange={(e)=>setEditingPlant({...editingPlant, name:e.target.value})} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs" required />
                   <div className="grid grid-cols-2 gap-3">
-                    <input type="number" value={editingPlant.price} onChange={(e)=>setEditingPlant({...editingPlant, price:e.target.value})} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs" required />
-                    <input type="number" value={editingPlant.stock} onChange={(e)=>setEditingPlant({...editingPlant, stock:e.target.value})} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs" required />
-                  </div>
-                  <input type="text" value={editingPlant.image_url || editingPlant.imageUrl || ''} onChange={(e)=>setEditingPlant({...editingPlant, image_url: e.target.value})} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs" />
+  <input type="number" value={editingPlant.price} onChange={(e)=>setEditingPlant({...editingPlant, price:e.target.value})} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs" required />
+  {/* 🔄 FIXED: Changed from editingPlant.stock to editingPlant.stock_quantity */}
+  <input type="number" value={editingPlant.stock_quantity || editingPlant.stock} onChange={(e)=>setEditingPlant({...editingPlant, stock_quantity:e.target.value})} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs" required />
+</div>
+{/* 🔄 FIXED: Updates image_url handling from arrays safely */}
+<input type="text" value={(editingPlant.images && editingPlant.images[0]) || editingPlant.image_url || ''} onChange={(e)=>setEditingPlant({...editingPlant, images: [e.target.value]})} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs" />
                   <div className="flex gap-2">
                     <button type="submit" className="flex-1 bg-[#1E3A2F] text-white py-2 rounded-xl text-xs font-bold cursor-pointer">Update Plant</button>
                     <button type="button" onClick={()=>setEditingPlant(null)} className="bg-gray-200 text-gray-700 py-2 px-4 rounded-xl text-xs font-bold cursor-pointer">Cancel</button>
@@ -256,18 +258,28 @@ export default function AdminDashboard() {
               <h2 className="text-md font-bold text-[#1E3A2F]">Live Plant Catalog Grid ({data?.products?.length})</h2>
               <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
                 {data?.products?.map((prod: any) => (
-                  <div key={prod.id} className="flex items-center justify-between border-b border-gray-50 pb-3 last:border-none last:pb-0">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gray-50 border border-gray-100 rounded-lg overflow-hidden flex items-center justify-center text-xs">
-                        {prod.image_url || prod.imageUrl ? <img src={prod.image_url || prod.imageUrl} className="w-full h-full object-cover" /> : '🪴'}
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-gray-800">{prod.name || prod.title}</p>
-                        <p className="text-[11px] text-gray-400">Price: ₹{prod.price} | Stock: <span className="font-bold text-gray-600">{prod.stock ?? 10} units</span></p>
-                      </div>
-                    </div>
-                    <button type="button" onClick={()=>setEditingPlant(prod)} className="p-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-gray-500 hover:text-[#1E3A2F] transition-colors cursor-pointer"><Edit2 className="w-3.5 h-3.5" /></button>
-                  </div>
+                  <div className="flex items-center justify-between border-b border-gray-50 pb-3 last:border-none last:pb-0">
+  <div className="flex items-center gap-3">
+    
+    {/* 📸 CHOOSE THIS ENTIRE IMAGE DIV CONTAINER BLOCK TO REPLACE */}
+    <div className="w-10 h-10 bg-gray-50 border border-gray-100 rounded-lg overflow-hidden flex items-center justify-center text-xs">
+      {prod.images && prod.images.length > 0 ? (
+        <img src={prod.images[0]} className="w-full h-full object-cover" alt="plant photo" />
+      ) : prod.image_url || prod.imageUrl ? (
+        <img src={prod.image_url || prod.imageUrl} className="w-full h-full object-cover" alt="plant photo" />
+      ) : (
+        '🪴'
+      )}
+    </div>
+
+    <div>
+      <p className="text-xs font-bold text-gray-800">{prod.name || prod.title}</p>
+      {/* 🔄 FIXED: Changed from prod.stock to prod.stock_quantity */}
+      <p className="text-[11px] text-gray-400">Price: ₹{prod.price} | Stock: <span className="font-bold text-gray-600">{prod.stock_quantity ?? 10} units</span></p>
+    </div>
+  </div>
+  <button type="button" onClick={()=>setEditingPlant(prod)} className="p-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-gray-500 hover:text-[#1E3A2F] transition-colors cursor-pointer"><Edit2 className="w-3.5 h-3.5" /></button>
+</div>
                 ))}
               </div>
             </div>
