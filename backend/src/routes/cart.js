@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer'); // 📦 Import multer file parser
 const { 
   getCart, addToCart, updateCartQuantity, removeFromCart, createPaymentOrder, saveOrder, getUserOrders,
-  getAdminDashboard, adminAddProduct, adminModifyProduct, uploadProductImage
+  getAdminDashboard, adminAddProduct, adminModifyProduct, adminDeleteProduct, uploadProductImage
 } = require('../controllers/cartController');
 const { protect } = require('../middleware/auth');
 
