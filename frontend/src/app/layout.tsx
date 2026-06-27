@@ -10,7 +10,7 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { setSession, setCart, logout, token } = useStore();
+  const { setSession, setCart, clearSession, token } = useStore();
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -33,14 +33,14 @@ export default function RootLayout({
         }
       } catch (err) {
         console.error('Session expired or invalid token detected. Clearing storage.');
-        logout(); // Safely clear compromised or old tokens
+        clearSession(); // Safely clear compromised or old tokens
       } finally {
         setHydrated(true);
       }
     };
 
     initializeSession();
-  }, [token, setSession, setCart, logout]);
+  }, [token, setSession, setCart, clearSession]);
 
   return (
     <html lang="en">
