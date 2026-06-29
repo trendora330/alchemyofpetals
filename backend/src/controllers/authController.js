@@ -92,7 +92,31 @@ const login = async (req, res, next) => {
   }
 };
 
+const forgotPassword = async (req, res, next) => {
+  try {
+    const { email, redirectTo } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email address is required.' });
+    }
+
+    // Requests a secure recovery loop from Supabase Auth
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: redirectTo || `${process.env.FRONTEND_URL}/reset-password`,
+    });
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.json({ success: true, message: 'Recovery link dispatched successfully!' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   register,
-  login
+  login,
+  forgotPassword
 };

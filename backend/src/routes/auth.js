@@ -1,24 +1,20 @@
 const express = require('express');
 const router = express.Router();
-const { register, login } = require('../controllers/authController');
-const { protect } = require('../middleware/auth');
 
-// 1. Public Authentication Entrypoints
+// 🔑 Pull in your controllers, including the newly added forgotPassword handler
+const { 
+  login, 
+  register, 
+  forgotPassword 
+} = require('../controllers/authController');
+
+// 📝 @POST /api/auth/register - Handles brand new user record validation layers
 router.post('/register', register);
+
+// 🔑 @POST /api/auth/login - Generates user sessions and handles credential verification
 router.post('/login', login);
 
-// 2. Protected Session Identity Endpoint
-// Ensure this sits cleanly above any catch-all routing logic
-router.get('/me', protect, (req, res) => {
-  res.json({
-    success: true,
-    user: {
-      id: req.user.id,
-      name: req.user.name,
-      email: req.user.email,
-      role: req.user.role
-    }
-  });
-});
+// ✉️ @POST /api/auth/forgot-password - Triggers Supabase password reset link transmissions
+router.post('/forgot-password', forgotPassword);
 
 module.exports = router;
